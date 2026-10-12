@@ -14,6 +14,8 @@ from pathlib import Path
 
 from cyvcf2 import VCF
 
+from . import tool_budget
+
 # INFO/ANN field order, per SnpEff's documented specification.
 _ANN_FIELDS = [
     "allele", "annotation", "annotation_impact", "gene_name", "gene_id",
@@ -41,10 +43,17 @@ def run_snpeff(input_vcf: str, output_vcf: str, snpeff_jar: str, genome_db: str,
         )
     cmd = [
         "java", "-Xmx4g", "-jar", snpeff_jar,
-        "-noStats", "-canon", "-dataDir", data_dir, genome_db, input_vcf,
+        # -noLog: SnpEff otherwise reports usage statistics to its own server;
+        # analyses must stay local.
+        "-noStats", "-noLog", "-canon", "-dataDir", data_dir, genome_db, input_vcf,
     ]
-    with open(output_vcf, "w") as out:
-        result = subprocess.run(cmd, stdout=out, stderr=subprocess.PIPE, text=True)
+    try:
+        with open(output_vcf, "w") as out:
+            result = subprocess.run(
+                cmd, stdout=out, stderr=subprocess.PIPE, text=True, timeout=tool_budget.remaining(),
+            )
+    except subprocess.TimeoutExpired:
+        raise SnpEffError("SnpEff timed out (analysis tool budget exhausted)") from None
     if result.returncode != 0:
         raise SnpEffError(f"SnpEff failed: {result.stderr.strip()[:2000]}")
 

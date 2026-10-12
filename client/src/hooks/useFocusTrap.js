@@ -1,11 +1,20 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 // Hand-rolled focus trap for dialog-like surfaces (modals, the mobile nav
 // drawer) -- no modal/dialog dependency exists anywhere in this app, and
 // pulling one in isn't worth it for a handful of call sites. Moves focus
 // into `containerRef` on open, cycles Tab/Shift+Tab within it, and closes
 // on Escape.
+//
+// `onClose` is read through a ref: callers pass inline functions, and having
+// it in the effect's dependencies re-ran the trap on every re-render, pulling
+// focus back to the first control mid-interaction.
 export default function useFocusTrap(containerRef, isOpen, onClose) {
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     if (!isOpen) return;
     const container = containerRef.current;
@@ -20,7 +29,7 @@ export default function useFocusTrap(containerRef, isOpen, onClose) {
     const handleKeyDown = (e) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
       if (e.key !== "Tab") return;
@@ -39,5 +48,5 @@ export default function useFocusTrap(containerRef, isOpen, onClose) {
 
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [isOpen, containerRef, onClose]);
+  }, [isOpen, containerRef]);
 }

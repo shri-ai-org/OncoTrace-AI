@@ -55,6 +55,20 @@ class NormalizedVariant:
         return self.filter == ["PASS"]
 
 
+def info_text(value) -> Optional[str]:
+    """An INFO value meant as text (GENE, TYPE, SVTYPE, LSEQ...), as a str.
+
+    cyvcf2 types INFO values by the uploaded file's OWN header, so a file that
+    declares e.g. GENE as Type=Integer yields an int here -- which then crashes
+    every downstream .upper()/.lower() with a 500. Coerced once, at the adapter
+    boundary, instead of defended at each use."""
+    if value is None:
+        return None
+    if isinstance(value, tuple):  # Number=A/R/. fields
+        value = ",".join(str(v) for v in value)
+    return str(value) or None
+
+
 class UnsupportedCallerError(Exception):
     """Raised when no adapter recognizes the VCF's caller -- a hard failure,
     not a best-effort guess, since silently misreading VAF/DP for an

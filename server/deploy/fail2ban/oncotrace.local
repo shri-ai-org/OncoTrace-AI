@@ -1,0 +1,15 @@
+# Installed as /etc/fail2ban/jail.d/oncotrace.local (see server/deploy/DEPLOY.md).
+#
+# nginx's rate limits already slow a password guesser to a few tries a minute;
+# this bans an address that keeps failing outright, at the firewall, in front
+# of nginx. A user mistyping a few times is never caught: 10 failures within
+# 10 minutes are needed.
+
+[oncotrace-auth]
+enabled  = true
+backend  = systemd
+filter   = oncotrace-auth
+port     = http,https
+maxretry = 10
+findtime = 10m
+bantime  = 1h

@@ -3,7 +3,7 @@ panel VCF (VarDict v1.8.2) used during planning. Field mapping below matches
 that file's exact INFO/FORMAT layout.
 """
 
-from .base import CallerAdapter, NormalizedVariant
+from .base import CallerAdapter, NormalizedVariant, info_text
 
 
 def _round(value, dp=6):
@@ -42,12 +42,12 @@ class VarDictAdapter(CallerAdapter):
         filters = list(variant.FILTERS) if variant.FILTERS else ["PASS"]
 
         return NormalizedVariant(
-            gene=info.get("GENE"),
+            gene=info_text(info.get("GENE")),
             chrom=str(variant.CHROM),
             pos=int(variant.POS),
             ref=variant.REF,
             alt=alt,
-            type=info.get("TYPE") or ("DEL" if is_symbolic else "Unknown"),
+            type=info_text(info.get("TYPE")) or ("DEL" if is_symbolic else "Unknown"),
             filter=filters,
             vaf=_round(float(vaf)),
             depth=int(depth),
@@ -62,12 +62,12 @@ class VarDictAdapter(CallerAdapter):
             oddratio=_round(info.get("ODDRATIO")),
             hicnt=info.get("HICNT"),
             hicov=info.get("HICOV"),
-            svtype=info.get("SVTYPE"),
+            svtype=info_text(info.get("SVTYPE")),
             svlen=abs(info.get("SVLEN")) if info.get("SVLEN") is not None else None,
             end=info.get("END"),
             splitread=info.get("SPLITREAD"),
             spanpair=info.get("SPANPAIR"),
-            lseq=info.get("LSEQ"),
-            rseq=info.get("RSEQ"),
+            lseq=info_text(info.get("LSEQ")),
+            rseq=info_text(info.get("RSEQ")),
             pmean=_round(info.get("PMEAN")),
         )

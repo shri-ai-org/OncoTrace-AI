@@ -19,6 +19,11 @@ from collections import defaultdict
 from pathlib import Path
 
 
+class PanelBedError(Exception):
+    """The panel BED is not a readable text BED (e.g. a binary file uploaded by
+    mistake). Its own error, so it is never reported as a malformed VCF."""
+
+
 def _merge_intervals(intervals: list[tuple[int, int]]) -> int:
     """Total covered bases across possibly-overlapping [start, end) intervals."""
     if not intervals:
@@ -38,7 +43,7 @@ def _merge_intervals(intervals: list[tuple[int, int]]) -> int:
 
 def footprint_from_bed(bed_path: str) -> float | None:
     """Sums merged interval lengths, so overlapping/duplicated BED rows don't
-    inflate the footprint."""
+    inflate the footprint. Raises PanelBedError if the file isn't text."""
     by_chrom: dict[str, list[tuple[int, int]]] = defaultdict(list)
     try:
         with open(bed_path) as fh:
@@ -56,6 +61,11 @@ def footprint_from_bed(bed_path: str) -> float | None:
                     by_chrom[parts[0].replace("chr", "")].append((start, end))
     except OSError:
         return None
+    except UnicodeDecodeError:
+        raise PanelBedError(
+            "The panel BED could not be read: it is not a plain-text BED file "
+            "(tab-separated chromosome, start, end per line)."
+        ) from None
 
     total = sum(_merge_intervals(iv) for iv in by_chrom.values())
     return round(total / 1_000_000, 4) if total else None

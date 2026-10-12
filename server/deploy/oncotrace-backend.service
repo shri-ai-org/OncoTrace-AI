@@ -1,18 +1,23 @@
 # systemd unit for the OncoTrace-AI analysis backend.
 #
-# Install (one-time):
+# Install (one-time; the `oncotrace` service account and its read access to the
+# code are created first -- see server/deploy/DEPLOY.md, "Backend service"):
 #   sudo cp server/deploy/oncotrace-backend.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now oncotrace-backend
 #
-# EDIT THE PATHS AND USER BELOW to match the actual deploy account and clone
-# location on this host before installing -- the values here are placeholders.
+# EDIT THE PATHS BELOW to match the clone location on this host before
+# installing -- the values here are placeholders.
 #
 # After any future `git pull` that touches server/, restart with:
 #   sudo systemctl restart oncotrace-backend
 #
 # Logs:
 #   journalctl -u oncotrace-backend -f
+#
+# Sandbox check after installing (lower is better; MemoryDenyWriteExecute is
+# deliberately absent, see below):
+#   systemd-analyze security oncotrace-backend
 
 [Unit]
 Description=OncoTrace-AI analysis backend (FastAPI/uvicorn)
@@ -20,26 +25,41 @@ After=network.target
 
 [Service]
 Type=simple
-User=anand
+# A dedicated, login-less system account that owns nothing: it can read the
+# code, venv and reference data, and write only to its private /tmp. Running as
+# the deploy login instead would hand an exploited pipeline that user's SSH
+# keys, git credentials and the rest of their home directory.
+User=oncotrace
+Group=oncotrace
 WorkingDirectory=/home/anand/OncoTrace-AI/server
 Environment="ONCOTRACE_PANEL_NAME=Targeted Oncology Panel (GeneMind SURFSeq5000)"
 
-# Sized for an AWS t3.large (2 vCPU / 8 GB RAM). Each analysis spawns
-# `java -Xmx4g`, so worker_count x ONCOTRACE_MAX_CONCURRENT_ANALYSES x 4GB is a
-# hard memory budget, not a soft one -- exceeding host RAM means the OOM killer
-# picks a process at random, which is a far worse failure mode than a 503.
-# With --workers 2 below, ONCOTRACE_MAX_CONCURRENT_ANALYSES must stay at 1
-# (config.py's default) to cap peak usage at 2 x 1 x 4GB = 8GB, leaving nothing
-# to spare for nginx/OS/React static files -- do not raise either value on this
-# instance size without also increasing RAM.
+# Empty = no CORS at all. The site and the API share one origin in production,
+# so no other origin may call the API from a browser. (Unset would fall back to
+# the localhost dev origins.)
+Environment=ONCOTRACE_CORS_ORIGINS=
+
+# Memory budget, sized for an AWS t3.large (2 vCPU / 8 GB RAM).
+# Each analysis spawns `java -Xmx4g` (SnpEff), and the concurrency limit below
+# is enforced PER uvicorn worker process. Peak analysis memory is therefore
+#     workers x ONCOTRACE_MAX_CONCURRENT_ANALYSES x 4 GB
+# With 1 worker x 1 analysis that is 4 GB, which fits under MemoryMax=6G
+# below with room for Python itself. (2 workers would allow 8 GB: more than
+# MemoryMax and the whole instance.) A request beyond capacity gets a clean
+# 503 "at capacity" instead of the kernel OOM-killing a process.
+#
+# One worker is not a throughput limit here: the app is async and runs the
+# analysis off the event loop, so it keeps serving /health and sign-in while an
+# analysis runs. Raise either value only on an instance with more RAM.
 Environment="ONCOTRACE_MAX_CONCURRENT_ANALYSES=1"
 
 # Secrets live here, NOT in this file. The unit file is world-readable and
 # `systemctl show` would print any Environment= value to any local user, so the
-# demo credential is loaded from a root-owned 0600 file instead:
+# demo credential is loaded from a root-owned 0600 file instead (systemd reads
+# it as root before dropping to User=, so the service account never needs to):
 #
-#   sudo install -m 600 -o root -g root /dev/null /etc/oncotrace/env
 #   sudo mkdir -p /etc/oncotrace
+#   sudo install -m 600 -o root -g root /dev/null /etc/oncotrace/env
 #   sudo nano /etc/oncotrace/env      # see server/.env.example for the keys
 #   sudo systemctl restart oncotrace-backend
 #
@@ -49,26 +69,52 @@ Environment="ONCOTRACE_MAX_CONCURRENT_ANALYSES=1"
 EnvironmentFile=-/etc/oncotrace/env
 # Bind to loopback only -- nginx is the only thing that should reach this
 # port. Never expose 8000 directly to the internet.
-ExecStart=/home/anand/OncoTrace-AI/server/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2
+ExecStart=/home/anand/OncoTrace-AI/server/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
 Restart=on-failure
 RestartSec=5
 
-# Hard backstop on an 8 GB box: if the app-level semaphore above is ever
-# bypassed by a bug, the kernel kills THIS service instead of letting memory
-# pressure take down nginx, sshd, or anything else on the host. 6G leaves
-# headroom for nginx + the OS above the ~8GB analysis budget calculated above;
-# lower this if other services share the instance.
+# Hard backstop: if the app-level limit above is ever bypassed by a bug, the
+# kernel kills THIS service instead of letting memory pressure take down
+# nginx, sshd or anything else on the host. 6G = the 4 GB analysis budget plus
+# Python, leaving ~2 GB for nginx and the OS. MemoryHigh throttles (reclaims)
+# before the hard limit is reached.
 MemoryMax=6G
 MemoryHigh=5G
 
-# Basic sandboxing -- cheap to add, meaningfully reduces blast radius if the
-# analysis pipeline (which shells out to bcftools/SnpEff on attacker-supplied
-# files) is ever exploited.
+# Sandboxing. The pipeline shells out to bcftools/SnpEff on attacker-supplied
+# files, so assume it can be exploited and leave it as little as possible.
+#
+# Filesystem: everything read-only except a private /tmp, which is all the app
+# writes to (uploads and per-request work dirs; deleted after each request).
+# ProtectHome must be read-only, not yes: the code and its .venv live under
+# /home, and `yes` hides /home from the service entirely, so it can't start.
 NoNewPrivileges=yes
 PrivateTmp=yes
+PrivateDevices=yes
 ProtectSystem=strict
-ProtectHome=yes
-ReadWritePaths=/home/anand/OncoTrace-AI/server
+ProtectHome=read-only
+UMask=0077
+# Kernel and host state: no tunables, modules, kernel log, cgroup tree, clock
+# or hostname changes.
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+# Process privileges: no capabilities at all (port 8000 needs none), no
+# setuid/setgid binaries, namespaces, realtime scheduling or personality tricks.
+CapabilityBoundingSet=
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+# IPv4/IPv6 for the listening socket, AF_UNIX for local IPC; no raw or netlink
+# sockets.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# NOT set: MemoryDenyWriteExecute=yes. SnpEff runs on the JVM, whose JIT
+# compiler needs writable+executable memory; with it set, java crashes on start.
 
 [Install]
 WantedBy=multi-user.target

@@ -23,6 +23,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from . import tool_budget
+
 # Approximate primary-assembly chromosome lengths (bp), GRCh37 vs GRCh38.
 # Used only to rule a build IN/OUT by plausibility -- not proof of a match.
 _CHROM_LENGTHS = {
@@ -157,6 +159,19 @@ class BuildUnresolvedError(Exception):
         super().__init__("Reference build could not be resolved without an explicit hint")
 
 
+class BuildMismatchError(Exception):
+    """The file's REF bases contradict the build the analysis ran against, so
+    the build that was selected (or stated in the header) is not the one the
+    file was aligned to. A problem with the request, never a pipeline fault."""
+
+    def __init__(self, build: str, source: str, header_build: str | None, locus: str | None):
+        self.build = build
+        self.source = source
+        self.header_build = header_build
+        self.locus = locus
+        super().__init__(f"REF bases do not match {build} ({source}) at {locus or 'a record'}")
+
+
 def build_from_header(raw_header: str) -> str | None:
     """Recognizes the several ways a VCF may state its build: an ##assembly or
     ##reference line, a contig assembly= attribute, or a reference filename."""
@@ -212,7 +227,8 @@ def _probe_clinvar(variants, clinvar_vcf: Path, limit: int = 400) -> int | None:
     try:
         result = subprocess.run(
             ["bcftools", "query", "-f", "%CHROM\t%POS\t%REF\t%ALT\n", "-R", "-", str(clinvar_vcf)],
-            input=regions, capture_output=True, text=True, timeout=180,
+            # Capped at 180s as before, and never past the analysis's budget.
+            input=regions, capture_output=True, text=True, timeout=min(180, tool_budget.remaining()),
         )
     except (OSError, subprocess.TimeoutExpired):
         return None

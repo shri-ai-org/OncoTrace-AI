@@ -1,0 +1,356 @@
+/* Hero (ui/Hero.jsx): a port of the "hero-1" component to this site's
+   palette. Static stylesheet (bundled into the main CSS), never injected at
+   runtime: the homepage is prerendered, so these rules must apply on first
+   paint. Every selector is namespaced (.ot-hero-*). */
+
+/* Sizing. The hero fills the first screen below the fixed navbar, and the
+   horizon arc always covers the bottom ~18.6% of that screen, on every
+   width and height.
+
+   --vh is 1svh where supported: the viewport with mobile browser toolbars
+   shown, i.e. the screen as first seen (plain vh otherwise). Everything below
+   scales with it, so the copy shrinks on short screens.
+
+   Bottom padding keeps the copy clear of the arc. On short screens the copy
+   may run onto the arc's pale upper part instead. */
+.ot-hero {
+  --vh: 1vh;
+  --arc-rise: calc(18.56 * var(--vh));   /* 20% smaller than the earlier 23.2% */
+  min-height: calc(100 * var(--vh) - var(--nav-h));
+  padding-top: clamp(1.25rem, calc(5 * var(--vh)), 5rem);
+  padding-bottom: calc(var(--arc-rise) + clamp(1rem, calc(3 * var(--vh)), 2.5rem));
+  background: linear-gradient(to bottom, #ffffff, #ffffff 45%, #eaf0f8 88%);
+}
+@supports (height: 1svh) {
+  .ot-hero { --vh: 1svh; }
+}
+@media (max-height: 759px) {
+  .ot-hero { padding-bottom: calc(var(--arc-rise) * 0.75); }
+}
+@media (max-height: 599px) {
+  .ot-hero { padding-bottom: calc(var(--arc-rise) * 0.3); }
+}
+
+/* Grid backdrop, fading out from the top centre. The section is `isolate`,
+   so this negative layer stays above the section's own background. */
+.ot-hero-grid {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: -10;
+  height: 600px;
+  pointer-events: none;
+  opacity: 0.8;
+  background-image:
+    linear-gradient(to right, #e6ecf4 1px, transparent 1px),
+    linear-gradient(to bottom, #e6ecf4 1px, transparent 1px);
+  background-size: 6rem 5rem;
+  -webkit-mask-image: radial-gradient(ellipse 80% 50% at 50% 0%, #000 70%, transparent 110%);
+  mask-image: radial-gradient(ellipse 80% 50% at 50% 0%, #000 70%, transparent 110%);
+}
+
+/* Horizon arc: a white dome rimmed in the brand blue. Its top sits
+   `--arc-rise` above the bottom of the FIRST SCREEN (not the section), so it
+   still covers that share when narrow phones need a taller hero for the copy.
+   Width 140%; height 4x the rise, capped at the width so narrow phones get a
+   round, globe-like cap instead of a tall bell. Either way the visible cap
+   spans edge to edge (its chord at that depth is >= 121% of the width).
+   Centred with `translate` so the entrance animation can own `transform`. */
+.ot-hero-arc {
+  position: absolute;
+  left: 50%;
+  top: calc(100 * var(--vh) - var(--nav-h) - var(--arc-rise));
+  height: min(calc(var(--arc-rise) * 4), 140vw);
+  width: 140%;
+  translate: -50% 0;
+  z-index: -5;        /* below in-flow copy, wherever they meet */
+  border-radius: 100%;
+  pointer-events: none;
+  /* Finish, top layer first: a faint specular sheen at the crest; then the
+     body, white with a soft blue limb that ends in a crisp bright rim. An
+     inset highlight traces the rim's inner edge; two outer glows (a tight
+     brand-blue one and a wide indigo-tinted atmosphere) lift it off the
+     page. The halo ring just outside is ::before. */
+  background:
+    radial-gradient(ellipse 42% 9% at 50% 2.5%, rgb(255 255 255 / 0.95), rgb(255 255 255 / 0) 72%),
+    radial-gradient(closest-side, #ffffff 0%, #ffffff 82%, #f5f8ff 89%, #e1ebff 94%, #b7cdfc 97.6%, #6f95f2 99.3%, #3b6ff0 100%);
+  box-shadow:
+    inset 0 2px 1px rgb(255 255 255 / 0.85),
+    0 -14px 44px -10px rgb(37 99 235 / 0.28),
+    0 -48px 140px -24px rgb(79 70 229 / 0.16);
+}
+.ot-hero-arc::before {
+  content: "";
+  position: absolute;
+  inset: -16px;
+  border-radius: 100%;
+  background: radial-gradient(closest-side, rgb(147 197 253 / 0) 95.8%, rgb(147 197 253 / 0.5) 97.6%, rgb(191 219 254 / 0.25) 98.8%, rgb(147 197 253 / 0) 100%);
+}
+
+/* ── Split layout (a `visual` is passed) ─────────────────────────────────
+   Desktop: the copy block is left-aligned and centred just left of the page
+   centre: 39% of the width at 1024px, easing to 46% from ~1380px up. Its
+   right edge always stays left of the visual's column (the right 25%, from
+   the hero top to just inside the arc); the visual is clipped to that column
+   with soft edges, so its particles can never reach the copy or navbar.
+   Below lg: one column. The copy stays centred, the visual is an edge-to-
+   edge strip under it, resting on the arc. */
+.ot-hero-visual {
+  position: relative;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+}
+.ot-hero-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@media (max-width: 1023.98px) {
+  .ot-hero--split {
+    justify-content: flex-start;
+    padding-bottom: clamp(0.75rem, calc(2 * var(--vh)), 1.5rem);
+  }
+  .ot-hero--split .ot-hero-content { margin-block: auto; }
+  .ot-hero-visual {
+    flex: none;
+    align-self: stretch;
+    margin: clamp(0.75rem, calc(2.5 * var(--vh)), 1.75rem) -1rem 0;
+    height: clamp(104px, calc(19 * var(--vh)), 210px);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 22%);
+  }
+}
+@media (min-width: 640px) and (max-width: 1023.98px) {
+  .ot-hero-visual { margin-inline: -1.5rem; }
+}
+
+@media (min-width: 1024px) {
+  .ot-hero--split {
+    padding-inline: 0;
+    align-items: stretch;
+    text-align: left;
+  }
+  .ot-hero--split .ot-hero-content { width: 100%; align-items: flex-start; }
+  /* Shrink-wrapped block, centred on its margin-left by translating back by
+     half its own width. The negative right margin gives fit-content room to
+     size to the headline instead of the space left of the margin. */
+  .ot-hero--split .ot-hero-copy {
+    width: fit-content;
+    max-width: 54rem;
+    margin-left: clamp(39%, calc(39% + (100vw - 1024px) * 0.27), 46%);
+    margin-right: -50%;
+    translate: -50% 0;
+    align-items: flex-start;
+  }
+  .ot-hero--split .ot-hero-sub { max-width: 38rem; }
+  .ot-hero-visual {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 25%;
+    height: calc(100 * var(--vh) - var(--nav-h) - var(--arc-rise) * 0.45);
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 16%), linear-gradient(to bottom, transparent 0, #000 10%);
+    -webkit-mask-composite: source-in;
+    mask-image: linear-gradient(to right, transparent 0, #000 16%), linear-gradient(to bottom, transparent 0, #000 10%);
+    mask-composite: intersect;
+  }
+}
+
+/* ── Capability cards (`capabilities` prop) ─────────────────────────────
+   A row of three linked cards in the copy, under the subtitle (in place of
+   a CTA button). Phones: compact tiles (icon over a two-line label). From
+   640px: horizontal cards with a caption. On desktop the row is left-aligned
+   with the copy and never wider than the headline (as an inline-size
+   container it stays out of the shrink-wrapped block's width), so the copy
+   stays clear of the visual's column. A narrow row (under 720px, e.g. on
+   small laptops) switches the horizontal cards to a compact style. */
+.ot-hero-caps {
+  position: relative;
+  width: 100%;
+  margin-top: clamp(1rem, calc(4 * var(--vh)), 2.25rem);
+  container-type: inline-size;
+}
+.ot-hero-caps-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+.ot-hero-cap { display: flex; }
+.ot-hero-cap-link {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.75rem 0.5rem;
+  border: 1px solid rgb(191 219 254 / 0.9);
+  border-radius: 0.875rem;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.95), rgb(255 255 255 / 0.8));
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 12px 30px -16px rgb(29 78 216 / 0.38);
+  color: var(--color-ink);
+  text-align: center;
+  text-decoration: none;
+  transition: transform 0.35s var(--ease-out-soft), box-shadow 0.35s var(--ease-out-soft), border-color 0.2s ease;
+}
+.ot-hero-cap-link:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-brand);
+  box-shadow: 0 2px 6px rgb(15 23 42 / 0.06), 0 18px 40px -18px rgb(29 78 216 / 0.5);
+}
+.ot-hero-cap-link:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 3px;
+}
+.ot-hero-cap-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--color-brand-line);
+  border-radius: 0.625rem;
+  background: linear-gradient(135deg, #ffffff, var(--color-brand-soft));
+  color: var(--color-brand);
+}
+.ot-hero-cap-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ot-hero-cap-title {
+  font-size: 0.78125rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.ot-hero-cap-caption {
+  display: none;
+  margin-top: 0.125rem;
+  font-family: var(--font-tech);
+  font-size: 0.6875rem;
+  letter-spacing: 0.03em;
+  color: var(--color-muted);
+}
+
+@media (min-width: 640px) {
+  .ot-hero-caps-list { max-width: 48rem; gap: 0.75rem; }
+  .ot-hero-cap-link {
+    flex-direction: row;
+    gap: 0.75rem;
+    padding: 0.75rem 0.875rem;
+    text-align: left;
+  }
+  .ot-hero-cap-title { font-size: 0.875rem; }
+  .ot-hero-cap-caption { display: block; }
+}
+@media (min-width: 1024px) {
+  .ot-hero--split .ot-hero-caps-list { margin: 0; max-width: none; }
+}
+@media (min-width: 640px) {
+  @container (max-width: 719.98px) {
+    .ot-hero-cap-link { gap: 0.5rem; padding: 0.625rem 0.625rem; }
+    .ot-hero-cap-icon { width: 1.875rem; height: 1.875rem; border-radius: 0.5rem; }
+    .ot-hero-cap-icon svg { width: 16px; height: 16px; }
+    .ot-hero-cap-title { font-size: 0.78125rem; white-space: nowrap; }
+    .ot-hero-cap-caption { font-size: 0.625rem; letter-spacing: 0.01em; white-space: nowrap; }
+  }
+}
+
+/* ── Hold (`hold` prop) ──────────────────────────────────────────────────
+   For one screen-height of scrolling (from --hold-start, set by Hero.jsx:
+   0, or later for heroes taller than a short phone's screen) the hero is
+   translated down by 70% of what was scrolled, so it glides up at 30% of
+   the scroll speed while the visual plays out. The spacer after it is that
+   70%: the content below scrolls at full speed and meets the hero's bottom
+   exactly as the hold ends, so there is never a gap or an overlap after.
+   HERO_HOLD_TRAVEL in lib/layout.js must match the 70/100 split. Only with
+   JavaScript and motion allowed. */
+.ot-hero-hold { --vh: 1vh; }
+@supports (height: 1svh) {
+  .ot-hero-hold { --vh: 1svh; }
+}
+.ot-hero-hold-space { display: none; }
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .ot-hero-hold-space {
+    display: block;
+    height: calc(70 * var(--vh));
+  }
+  @supports (animation-timeline: scroll()) {
+    .ot-hero--hold {
+      animation: ot-hero-hold linear both;
+      animation-timeline: scroll(root block);
+      animation-range: var(--hold-start, 0px) calc(var(--hold-start, 0px) + 100 * var(--vh));
+    }
+  }
+}
+@keyframes ot-hero-hold {
+  from { translate: 0 0; }
+  to   { translate: 0 calc(70 * var(--vh)); }
+}
+
+/* Blends the dome into the workflow section's canvas below. */
+.ot-hero-fade {
+  position: absolute;
+  inset: auto 0 0;
+  height: min(56px, 6vh);
+  z-index: -4;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--color-canvas));
+}
+
+/* Copy sizes and gaps, scaled down on short screens. */
+.ot-hero-h1 {
+  margin-top: clamp(0.75rem, calc(3 * var(--vh)), 1.75rem);
+  font-size: clamp(1.75rem, min(1.1rem + 4.6vw, calc(8.5 * var(--vh))), 5rem);
+  line-height: 1.04;
+}
+.ot-hero-tagline { margin-top: clamp(0.5rem, calc(2.2 * var(--vh)), 1.5rem); }
+.ot-hero-sub {
+  margin-top: clamp(0.625rem, calc(2.4 * var(--vh)), 1.5rem);
+  font-size: clamp(0.9375rem, min(0.85rem + 0.6vw, calc(2.3 * var(--vh))), 1.25rem);
+}
+.ot-hero-cta  { margin-top: clamp(1rem, calc(4 * var(--vh)), 2.5rem); }
+.ot-hero-foot { margin-top: clamp(0.75rem, calc(2.6 * var(--vh)), 1.75rem); }
+
+/* Gradient headline. A coloured child span (the brand word) keeps its own
+   colour over the clipped background. */
+.ot-hero-title {
+  background-image: linear-gradient(135deg, var(--color-ink) 30%, rgb(11 18 32 / 0.55));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── First-paint entrance (runs on the prerendered HTML, before any JS) ──
+   The headline is the Largest Contentful Paint element, so it only moves: it
+   never starts transparent. Supporting elements fade in after it. */
+@keyframes otHeroRise {
+  from { transform: translateY(16px); }
+  to   { transform: none; }
+}
+@keyframes otHeroFadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes otHeroFadeUp {
+  from { opacity: 0; transform: translateY(40px); }
+  to   { opacity: 1; transform: none; }
+}
+.ot-hero-rise { animation: otHeroRise 0.9s var(--ease-out-soft) both; }
+.ot-hero-in-1 { animation: otHeroFadeIn 0.8s var(--ease-out-soft) 0.05s both; }
+.ot-hero-in-2 { animation: otHeroFadeIn 0.8s var(--ease-out-soft) 0.18s both; }
+.ot-hero-in-3 { animation: otHeroFadeIn 0.8s var(--ease-out-soft) 0.3s both; }
+.ot-hero-in-4 { animation: otHeroFadeIn 0.8s var(--ease-out-soft) 0.4s both; }
+.ot-hero-arc  { animation: otHeroFadeUp 1.2s var(--ease-out-soft) 0.15s both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ot-hero-rise, .ot-hero-in-1, .ot-hero-in-2, .ot-hero-in-3, .ot-hero-in-4, .ot-hero-arc {
+    animation: none;
+  }
+}

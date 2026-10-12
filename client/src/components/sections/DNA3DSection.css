@@ -1,0 +1,14 @@
+/* DNA3DSection: short-screen layout (landscape phones, small laptop windows,
+   200% zoom). The sticky stage is only ~300px tall there, so the heading,
+   the panel copy and the scroll hint are scaled down to stop them
+   overlapping. Loaded with the section's lazy chunk. Selectors .dna-*. */
+@media (max-height: 600px) {
+  .dna-heading { padding-top: 0.75rem; }
+  .dna-heading .ot-h2 { margin-top: 0.25rem; font-size: clamp(1.125rem, 4.5vh, 1.5rem); }
+  .dna-heading .ot-kicker { font-size: 0.625rem; }
+  .dna-track { padding-top: clamp(3.5rem, 18vh, 6rem); }
+  .dna-tag { margin-bottom: 0.375rem; }
+  .dna-title { font-size: clamp(1.5rem, 8.5vh, 2.75rem); line-height: 1.02; }
+  .dna-rule { margin-block: 0.5rem; }
+  .dna-hint { display: none; }
+}

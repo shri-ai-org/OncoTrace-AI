@@ -1,0 +1,8 @@
+# https://www.oncotrace-ai.org/robots.txt
+User-agent: *
+Allow: /
+# Credential-gated demo and the backend API: nothing indexable.
+Disallow: /demo
+Disallow: /api/
+
+Sitemap: https://www.oncotrace-ai.org/sitemap.xml

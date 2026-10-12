@@ -34,12 +34,38 @@ output before sorting it, rather than trusting an upstream tool it doesn't
 control to preserve them.
 """
 
+import re
 import subprocess
 from pathlib import Path
+
+from . import tool_budget
 
 
 class NormalizationError(Exception):
     pass
+
+
+class ReferenceMismatchError(NormalizationError):
+    """The file's REF bases disagree with the reference FASTA. Almost always
+    a VCF aligned to a different build than the one it is analysed against,
+    i.e. a problem with the request, not a pipeline failure."""
+
+    def __init__(self, locus: str | None):
+        self.locus = locus
+        super().__init__(f"REF allele does not match the reference genome at {locus or 'a record'}")
+
+
+# bcftools norm's own wording; the locus is CHROM:POS (no paths).
+_REF_MISMATCH = re.compile(r"Reference allele mismatch at (\S+?:\d+)")
+
+
+def _run(cmd: list[str], what: str) -> subprocess.CompletedProcess:
+    """subprocess.run within the analysis's tool budget; an overrun is a
+    NormalizationError like any other bcftools failure."""
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=tool_budget.remaining())
+    except subprocess.TimeoutExpired:
+        raise NormalizationError(f"{what} timed out (analysis tool budget exhausted)") from None
 
 
 def _read_fai(reference_fasta: str) -> dict[str, int] | None:
@@ -61,7 +87,7 @@ def _read_fai(reference_fasta: str) -> dict[str, int] | None:
 def _declared_contigs(vcf_path: str) -> set[str]:
     """Contig names already declared via ##contig=<ID=...> header lines in
     vcf_path -- a header-only read, cheap even for a large file."""
-    header = subprocess.run(["bcftools", "view", "-h", vcf_path], capture_output=True, text=True)
+    header = _run(["bcftools", "view", "-h", vcf_path], "bcftools view -h")
     if header.returncode != 0:
         raise NormalizationError(f"bcftools view -h failed: {header.stderr.strip()}")
     declared = set()
@@ -79,7 +105,7 @@ def _used_contigs(vcf_path: str) -> list[str]:
     appearance -- the authoritative source of truth regardless of whether
     the header declares them (a VCF may validly omit ##contig lines, or
     declare them incompletely)."""
-    query = subprocess.run(["bcftools", "query", "-f", "%CHROM\n", vcf_path], capture_output=True, text=True)
+    query = _run(["bcftools", "query", "-f", "%CHROM\n", vcf_path], "bcftools query")
     if query.returncode != 0:
         raise NormalizationError(f"bcftools query failed: {query.stderr.strip()}")
     return list(dict.fromkeys(c for c in query.stdout.splitlines() if c))
@@ -201,10 +227,12 @@ def normalize_vcf(input_path: str, output_path: str, reference_fasta: str) -> No
 
     norm_input = ensure_contig_headers(input_path, output_path, reference_fasta)
 
-    result = subprocess.run(
+    result = _run(
         ["bcftools", "norm", "-f", reference_fasta, "-m", "-any", "-O", "v", "-o", output_path, norm_input],
-        capture_output=True,
-        text=True,
+        "bcftools norm",
     )
     if result.returncode != 0:
+        mismatch = _REF_MISMATCH.search(result.stderr)
+        if mismatch:
+            raise ReferenceMismatchError(mismatch.group(1))
         raise NormalizationError(f"bcftools norm failed: {result.stderr.strip()}")

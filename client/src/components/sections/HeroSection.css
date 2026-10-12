@@ -1,0 +1,58 @@
+/* HeroSection workflow styles (the hero itself is styled in ui/Hero.css).
+
+   Static stylesheet (bundled into the main CSS), never injected at runtime:
+   the homepage is prerendered, so these rules must apply on first paint.
+   Every selector is namespaced (.hero-*, .flow-*). */
+
+/* ── Workflow cards ─────────────────────────────────────────────────── */
+.flow-card {
+  transition: transform 0.35s var(--ease-out-soft), box-shadow 0.35s var(--ease-out-soft), border-color 0.35s ease;
+}
+.flow-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--color-hairline-strong);
+  box-shadow: var(--shadow-lift);
+}
+.flow-card img {
+  transition: transform 0.6s var(--ease-out-soft);
+}
+.flow-card:hover img {
+  transform: scale(1.035);
+}
+
+/* Slim connector: a hairline with a chevron, in the accent colour. */
+.flow-connector {
+  position: relative;
+  height: 1.5px;
+  width: 100%;
+  background: linear-gradient(90deg, rgb(29 78 216 / 0.15), rgb(29 78 216 / 0.55));
+}
+.flow-connector::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-top: 1.5px solid var(--color-brand);
+  border-right: 1.5px solid var(--color-brand);
+  transform: translateY(-50%) rotate(45deg);
+}
+.flow-connector-v {
+  position: relative;
+  width: 1.5px;
+  height: 100%;
+  margin-inline: auto;
+  background: linear-gradient(180deg, rgb(29 78 216 / 0.15), rgb(29 78 216 / 0.55));
+}
+.flow-connector-v::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--color-brand);
+  border-bottom: 1.5px solid var(--color-brand);
+  transform: translateX(-50%) rotate(45deg);
+}

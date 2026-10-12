@@ -19,14 +19,34 @@ depth stays missing rather than becoming a plausible-looking number.
 import csv
 import gzip
 import io
+import itertools
 import re
+import zlib
+from contextlib import contextmanager
 from pathlib import Path
+
+from ..core import config
 
 
 class UnsupportedFormatError(Exception):
     def __init__(self, message: str, detail: dict | None = None):
         self.detail = detail or {}
         super().__init__(message)
+
+
+class InputTooLargeError(UnsupportedFormatError):
+    """Over a size limit (decompressed bytes, record count, line length) --
+    reported as a 413, like an over-cap upload."""
+
+
+# The longest single line read anywhere in this module. Real VCF/MAF lines are
+# at most a few KB (a heavily annotated INFO field: tens of KB); without a
+# bound, one newline-free upload is read into memory whole.
+MAX_LINE_CHARS = 1024 * 1024
+
+# Format sniffing looks at no more than this many lines / characters.
+_SNIFF_LINES = 200
+_SNIFF_CHARS = 1024 * 1024
 
 
 # ---------------------------------------------------------------- compression
@@ -39,12 +59,70 @@ def _is_gzip(path: str) -> bool:
         return fh.read(2) == GZIP_MAGIC
 
 
+class _CappedStream(io.RawIOBase):
+    """A decompressing stream that refuses to yield more than
+    config.MAX_DECOMPRESSED_BYTES -- the guard against a gzip bomb, which
+    otherwise expands ~1000:1 into memory or the temp dir."""
+
+    def __init__(self, raw):
+        self._raw = raw
+        self._total = 0
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer) -> int:
+        n = self._raw.readinto(buffer)
+        self._total += n
+        if self._total > config.MAX_DECOMPRESSED_BYTES:
+            raise InputTooLargeError(
+                f"This compressed file expands to more than the "
+                f"{config.MAX_DECOMPRESSED_BYTES // (1024 * 1024)} MB limit for decompressed input."
+            )
+        return n
+
+    def close(self) -> None:
+        self._raw.close()
+        super().close()
+
+
+def _open_gzip(path: str) -> io.BufferedReader:
+    return io.BufferedReader(_CappedStream(gzip.open(path, "rb")))
+
+
+@contextmanager
+def _decompression_errors():
+    """A corrupt or truncated gzip surfaces from deep inside the reader as
+    zlib.error / EOFError / BadGzipFile; any of them means a bad upload (400),
+    not a server fault (500)."""
+    try:
+        yield
+    except (gzip.BadGzipFile, EOFError, zlib.error) as exc:
+        raise UnsupportedFormatError(
+            "This file is gzip-compressed but could not be decompressed -- it looks corrupt or truncated.",
+            {"decompression_error": str(exc)[:200]},
+        ) from None
+
+
 def open_text(path: str):
     """Opens a possibly-gzip/bgzip-compressed text file. bgzip is gzip-compatible,
-    so a single gzip reader covers both."""
+    so a single gzip reader covers both. Callers read it inside
+    _decompression_errors()."""
     if _is_gzip(path):
-        return gzip.open(path, "rt", errors="replace")
+        return io.TextIOWrapper(_open_gzip(path), errors="replace")
     return open(path, "r", errors="replace")
+
+
+def _bounded_lines(fh):
+    """Iterates lines like `for line in fh`, but never reads more than
+    MAX_LINE_CHARS for one line."""
+    while line := fh.readline(MAX_LINE_CHARS + 1):
+        if len(line) > MAX_LINE_CHARS:
+            raise InputTooLargeError(
+                f"This file contains a line longer than {MAX_LINE_CHARS // (1024 * 1024)} MB; "
+                f"no variant table has lines that long."
+            )
+        yield line
 
 
 def decompress_if_needed(path: str, workdir: Path) -> str:
@@ -53,7 +131,7 @@ def decompress_if_needed(path: str, workdir: Path) -> str:
     if not _is_gzip(path):
         return path
     out = workdir / "input.decompressed.vcf"
-    with gzip.open(path, "rb") as src, open(out, "wb") as dst:
+    with _decompression_errors(), _open_gzip(path) as src, open(out, "wb") as dst:
         while chunk := src.read(1024 * 1024):
             dst.write(chunk)
     return str(out)
@@ -63,13 +141,18 @@ def decompress_if_needed(path: str, workdir: Path) -> str:
 
 def detect_format(path: str) -> str:
     """Returns 'vcf' | 'maf' | 'tabular'. Content-based, not extension-based."""
-    with open_text(path) as fh:
-        head = []
-        for _ in range(200):
-            line = fh.readline()
+    head, budget = [], _SNIFF_CHARS
+    with _decompression_errors(), open_text(path) as fh:
+        for _ in range(_SNIFF_LINES):
+            # Bounded: one enormous first "line" must not be read in full just
+            # to find out what kind of file this is.
+            line = fh.readline(budget)
             if not line:
                 break
             head.append(line)
+            budget -= len(line)
+            if budget <= 0:
+                break
 
     if not head:
         raise UnsupportedFormatError("File is empty.")
@@ -130,14 +213,23 @@ def _sniff_dialect(sample_text: str):
 def read_tabular_variants(path: str) -> tuple[list[dict], dict]:
     """Parses a MAF or generic variant table into row dicts plus a mapping report
     describing exactly which source column filled each field -- so an operator can
-    verify the interpretation rather than trusting it."""
-    with open_text(path) as fh:
-        lines = [l for l in fh if l.strip() and not l.startswith("##")]
-    if not lines:
-        raise UnsupportedFormatError("File contains no data rows.")
+    verify the interpretation rather than trusting it.
 
-    dialect = _sniff_dialect("".join(lines[:20]))
-    reader = csv.DictReader(io.StringIO("".join(lines)), dialect=dialect)
+    Streams the file: rows are parsed straight off the handle rather than via
+    in-memory copies of the whole text, and stop at config.MAX_RECORDS."""
+    with _decompression_errors(), open_text(path) as fh:
+        lines = (l for l in _bounded_lines(fh) if l.strip() and not l.startswith("##"))
+        sample = list(itertools.islice(lines, 20))
+        if not sample:
+            raise UnsupportedFormatError("File contains no data rows.")
+        try:
+            return _parse_table(itertools.chain(sample, lines), _sniff_dialect("".join(sample)))
+        except csv.Error as exc:
+            raise UnsupportedFormatError(f"This table could not be parsed: {str(exc)[:200]}") from None
+
+
+def _parse_table(lines, dialect) -> tuple[list[dict], dict]:
+    reader = csv.DictReader(lines, dialect=dialect)
     fieldnames = reader.fieldnames or []
     lower_to_actual = {(f or "").strip().lower(): f for f in fieldnames}
 
@@ -168,7 +260,11 @@ def read_tabular_variants(path: str) -> tuple[list[dict], dict]:
         return val or None
 
     rows = []
-    for raw in reader:
+    for n, raw in enumerate(reader, 1):
+        if n > config.MAX_RECORDS:
+            raise InputTooLargeError(
+                f"This table has more than {config.MAX_RECORDS:,} rows, the per-file limit."
+            )
         chrom = get(raw, "chrom")
         pos = get(raw, "pos")
         if not chrom or not pos:

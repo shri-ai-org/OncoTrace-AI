@@ -201,9 +201,15 @@ def test_s5_provenance_surfaces_the_missing_panel_bed(s5_analysis):
     assert any("panel footprint" in item for item in checklist)
 
 
-def test_s5_panel_density_is_null_without_a_bed(s5_analysis):
-    assert s5_analysis["panel_mutation_density"] is None
-    assert s5_analysis["meta"]["panel_footprint_mb"] is None
+def test_s5_panel_density_is_null_without_a_bed(monkeypatch, tmp_path):
+    # Its own run with every footprint source pointed at nothing: a machine with
+    # gene spans provisioned would otherwise (correctly) produce an estimate.
+    missing = tmp_path / "not-provisioned.bed"
+    monkeypatch.setattr(config, "PANEL_BED", missing)
+    monkeypatch.setattr(config, "GENE_SPANS_BY_BUILD", {"GRCh37": missing, "GRCh38": missing})
+    analysis = analyze_vcf(str(S5), "S5.panel.annotated.vcf", "GRCh38")
+    assert analysis["panel_mutation_density"] is None
+    assert analysis["meta"]["panel_footprint_mb"] is None
 
 
 def test_build_corroboration_confirms_grch38_for_s5(s5_variants):

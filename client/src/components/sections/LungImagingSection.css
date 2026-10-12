@@ -1,0 +1,218 @@
+/* LungImagingSection: the CT viewer and the example-finding card.
+   Static stylesheet (bundled into the main CSS). Every selector is
+   namespaced (.lung-*). All motion is decorative and switched off under
+   prefers-reduced-motion. */
+
+/* A faint radiology-blue glow behind the viewer gives the section its own
+   identity without leaving the page's light theme. */
+.lung-section::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(60% 55% at 22% 58%, rgb(219 234 254 / 0.55), transparent 70%);
+}
+
+/* ── Viewer ─────────────────────────────────────────────────────────────── */
+.lung-viewer {
+  position: relative;
+  margin: 0;
+}
+.lung-viewer-frame {
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  box-shadow: var(--shadow-lift);
+}
+.lung-viewer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.07);
+  font-family: var(--font-tech);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+.lung-viewer-bar--foot {
+  border-top: 1px solid rgb(255 255 255 / 0.07);
+  border-bottom: 0;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.lung-live {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #34d399;
+  box-shadow: 0 0 0 3px rgb(52 211 153 / 0.18);
+}
+
+/* The stage has the image's own 4:3 shape, so the SVG overlay (same
+   viewBox) lines up with it exactly at every size. */
+.lung-viewer-stage {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  view-timeline-name: --lung-stage;
+}
+.lung-viewer-stage > img,
+.lung-viewer-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.lung-viewer-stage > img { object-fit: cover; }
+
+.lung-field {
+  fill: rgb(59 130 246 / 0.12);
+  stroke: #60a5fa;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px rgb(96 165 250 / 0.55));
+}
+
+/* Brackets in the four corners of the stage. */
+.lung-corners {
+  position: absolute;
+  inset: 0.875rem;
+  pointer-events: none;
+  --c: rgb(147 197 253 / 0.85);
+  --l: 1.125rem;
+  --t: 1.5px;
+  background:
+    linear-gradient(var(--c), var(--c)) top left / var(--l) var(--t) no-repeat,
+    linear-gradient(var(--c), var(--c)) top left / var(--t) var(--l) no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / var(--l) var(--t) no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / var(--t) var(--l) no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / var(--l) var(--t) no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / var(--t) var(--l) no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / var(--l) var(--t) no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / var(--t) var(--l) no-repeat;
+}
+
+.lung-tag {
+  position: absolute;
+  left: 1.625rem;
+  top: 1.5rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid rgb(96 165 250 / 0.45);
+  border-radius: 0.375rem;
+  background: rgb(11 20 36 / 0.7);
+  font-family: var(--font-tech);
+  font-size: 0.65625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #dbeafe;
+}
+.lung-side {
+  position: absolute;
+  top: 50%;
+  translate: 0 -50%;
+  font-family: var(--font-tech);
+  font-size: 0.75rem;
+  color: rgb(203 213 225 / 0.75);
+}
+.lung-side--r { left: 1.25rem; }
+.lung-side--l { right: 1.25rem; }
+
+/* A soft band sweeping down the slice. Transform-only, so it runs on the
+   compositor. */
+.lung-scan {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 22%;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgb(96 165 250 / 0), rgb(96 165 250 / 0.1) 70%, rgb(147 197 253 / 0.5) 98%, rgb(147 197 253 / 0));
+  mix-blend-mode: screen;
+  opacity: 0;
+}
+
+/* ── Example finding ────────────────────────────────────────────────────── */
+.lung-finding {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-hairline);
+  border-radius: 0.875rem;
+  background: #fff;
+  box-shadow: var(--shadow-lift);
+}
+.lung-finding-media {
+  position: relative;
+  flex: none;
+  width: 7.5rem;
+  aspect-ratio: 495 / 392;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: #000;
+}
+.lung-finding-media > img,
+.lung-finding-media > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.lung-finding-media > img { object-fit: cover; }
+.lung-finding-ring {
+  fill: none;
+  stroke: #f87171;
+  stroke-width: 4;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Desktop: the finding card overlaps the viewer's lower edge (over the
+   back muscles and couch, never the lungs) and hangs into the column gap. */
+@media (min-width: 1024px) {
+  .lung-viewer { margin-bottom: 2.25rem; }
+  .lung-finding {
+    position: absolute;
+    right: -1.5rem;
+    bottom: -2.25rem;
+    width: min(48%, 21rem);
+    margin-top: 0;
+  }
+}
+
+/* ── Motion ─────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .lung-scan {
+    opacity: 1;
+    animation: lungScan 6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+  .lung-finding-ring { animation: lungPulse 2.4s ease-in-out infinite; }
+
+  /* Lung outlines draw in as the viewer scrolls into view (scroll-driven
+     where supported; otherwise they are simply shown). */
+  @supports (animation-timeline: view()) {
+    .lung-field {
+      stroke-dasharray: 1;
+      animation: lungDraw linear both;
+      animation-timeline: --lung-stage;
+      animation-range: entry 30% cover 55%;
+    }
+  }
+}
+
+@keyframes lungScan {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(455%); }
+}
+@keyframes lungPulse {
+  0%, 100% { opacity: 1; scale: 1; }
+  50%      { opacity: 0.55; scale: 1.18; }
+}
+@keyframes lungDraw {
+  from { stroke-dashoffset: 1; fill-opacity: 0; }
+  to   { stroke-dashoffset: 0; fill-opacity: 1; }
+}

@@ -59,12 +59,33 @@ ALLOW_GENERIC_CALLER = os.environ.get("ONCOTRACE_ALLOW_GENERIC_CALLER", "true").
 
 MAX_UPLOAD_BYTES = int(os.environ.get("ONCOTRACE_MAX_UPLOAD_BYTES", 500 * 1024 * 1024))
 
+# Ceiling on what a gzip/bgzip upload may expand to. Without it a ~200 KB gzip
+# bomb inflates to hundreds of MB (or fills the disk) before anything else
+# looks at it. 2 GiB is 4x the upload cap: well above any real panel or exome
+# VCF, and the most disk one request can claim in its temp dir before
+# MAX_RECORDS below rejects an oversized file.
+MAX_DECOMPRESSED_BYTES = int(os.environ.get("ONCOTRACE_MAX_DECOMPRESSED_BYTES", 2 * 1024 ** 3))
+
+# Records (VCF lines or table rows) accepted per file. A targeted panel yields
+# tens to a few thousand; every record is held in memory through annotation and
+# returned in the JSON response (~10 KB each by then), so this bounds both a
+# request's memory and the size of what the browser has to render.
+MAX_RECORDS = int(os.environ.get("ONCOTRACE_MAX_RECORDS", 20_000))
+
+# Wall-clock seconds ALL external tools of one analysis (bcftools, bgzip, tabix,
+# SnpEff) may use between them -- see app/pipeline/tool_budget.py. Must stay
+# below nginx's proxy_read_timeout (300s) so a stuck tool ends as a clean error
+# with an incident id rather than an nginx 504 while the work carries on unseen.
+TOOL_BUDGET_SECONDS = float(os.environ.get("ONCOTRACE_TOOL_BUDGET_SECONDS", 240))
+
 # Concurrent analyses allowed per worker process. Each analysis runs SnpEff as
 # `java -Xmx4g`, so the real constraint is memory: keep
 # (uvicorn --workers) x (this value) x 4GB comfortably under host RAM.
 # Requests beyond the limit are shed with a 503 rather than queued, because a
 # queued genomics job is usually abandoned by the caller long before it runs.
-MAX_CONCURRENT_ANALYSES = int(os.environ.get("ONCOTRACE_MAX_CONCURRENT_ANALYSES", 2))
+# Default 1: safe on an 8 GB host with a single uvicorn worker (see
+# deploy/oncotrace-backend.service for the full memory budget).
+MAX_CONCURRENT_ANALYSES = int(os.environ.get("ONCOTRACE_MAX_CONCURRENT_ANALYSES", 1))
 
 # Vite takes the next free port when 5173 is already in use (a second dev
 # server, or one left running from an earlier session), so the 5174/5175
@@ -76,6 +97,9 @@ _DEV_ORIGINS = ",".join(
     for host in ("localhost", "127.0.0.1")
 )
 
+# Set but empty (as deploy/oncotrace-backend.service does) means no CORS at all:
+# in production the site and the API share one origin, so no other origin
+# needs to be let in. Unset means the dev origins above.
 CORS_ORIGINS = [
     o.strip() for o in os.environ.get(
         "ONCOTRACE_CORS_ORIGINS",
@@ -83,9 +107,9 @@ CORS_ORIGINS = [
     ).split(",") if o.strip()
 ]
 
-# When false, requests fail with a clear 503 if reference data is missing rather
-# than returning partial results that could be mistaken for a full analysis.
-ALLOW_PARTIAL_ANNOTATION = os.environ.get("ONCOTRACE_ALLOW_PARTIAL", "true").lower() == "true"
+# Swagger UI and the OpenAPI schema (/docs, /redoc, /openapi.json). Off unless
+# asked for: they map the whole API surface and nothing in production uses them.
+API_DOCS = os.environ.get("ONCOTRACE_API_DOCS", "false").lower() == "true"
 
 # Single shared credential gating the analysis endpoint while the demo is
 # invite-only. Deliberately fail-closed: when these are unset the protected
@@ -94,9 +118,27 @@ ALLOW_PARTIAL_ANNOTATION = os.environ.get("ONCOTRACE_ALLOW_PARTIAL", "true").low
 DEMO_AUTH_USERNAME = os.environ.get("ONCOTRACE_DEMO_USERNAME") or None
 DEMO_AUTH_PASSWORD = os.environ.get("ONCOTRACE_DEMO_PASSWORD") or None
 
+# A password that is still the .env.example placeholder, or short enough to
+# fall to the guesses nginx's rate limit still allows, counts as unconfigured:
+# same fail-closed 503 as a missing one, never a working weak login.
+_PLACEHOLDER_PASSWORDS = {"change-me", "changeme", "password"}
+MIN_DEMO_PASSWORD_LENGTH = 12
+
+
+def demo_auth_problem() -> str | None:
+    """Why the configured demo credential is refused, or None if it is usable.
+    Names the setting at fault, never its value."""
+    if not (DEMO_AUTH_USERNAME and DEMO_AUTH_PASSWORD):
+        return "ONCOTRACE_DEMO_USERNAME/ONCOTRACE_DEMO_PASSWORD are unset"
+    if DEMO_AUTH_PASSWORD.lower() in _PLACEHOLDER_PASSWORDS:
+        return "ONCOTRACE_DEMO_PASSWORD is still the .env.example placeholder"
+    if len(DEMO_AUTH_PASSWORD) < MIN_DEMO_PASSWORD_LENGTH:
+        return f"ONCOTRACE_DEMO_PASSWORD is shorter than {MIN_DEMO_PASSWORD_LENGTH} characters"
+    return None
+
 
 def demo_auth_configured() -> bool:
-    return bool(DEMO_AUTH_USERNAME and DEMO_AUTH_PASSWORD)
+    return demo_auth_problem() is None
 
 
 def read_release(path: Path, label: str) -> str:

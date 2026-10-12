@@ -29,6 +29,13 @@ def test_footprint_from_bed_skips_headers_and_bad_rows(tmp_path):
     assert panel.footprint_from_bed(str(bed)) == pytest.approx(1.0)
 
 
+def test_binary_bed_raises_a_bed_error_not_a_codec_error(tmp_path):
+    bed = tmp_path / "p.bed"
+    bed.write_bytes(bytes(range(256)) * 4)
+    with pytest.raises(panel.PanelBedError):
+        panel.footprint_from_bed(str(bed))
+
+
 def test_uploaded_bed_takes_precedence_and_reports_no_caveat(tmp_path):
     uploaded = write(tmp_path, "up.bed", "1\t0\t2000000\tX\n")
     configured = write(tmp_path, "cfg.bed", "1\t0\t9000000\tY\n")

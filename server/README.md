@@ -25,7 +25,8 @@ only — never VCF contents.
 cd server
 python3 -m venv .venv          # if ensurepip is missing: python3 -m venv --without-pip .venv
                                # then: curl -sS https://bootstrap.pypa.io/get-pip.py | .venv/bin/python3
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -r requirements.txt        # production
+.venv/bin/pip install -r requirements-dev.txt    # + pytest/httpx, for development
 ```
 
 System tools required on PATH: `bcftools`, `bgzip`, `tabix`, `samtools`, and
@@ -58,6 +59,9 @@ Check what's live: `curl localhost:8000/api/v1/health`
 .venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
+Swagger UI (`/docs`) is off by default; set `ONCOTRACE_API_DOCS=true` in
+`server/.env` to browse the API locally.
+
 The Vite dev server proxies `/api` here (see `client/vite.config.js`). To point
 the frontend at it instead of its built-in mock, set in `client/.env`:
 
@@ -77,7 +81,8 @@ VITE_LB_USE_MOCK_API=false
 | `sample_name` | no | Which sample column to analyze in a multi-sample VCF |
 
 ```bash
-curl -F vcf_file=@tests/fixtures/S5.panel.annotated.vcf \
+curl -u "$ONCOTRACE_DEMO_USERNAME:$ONCOTRACE_DEMO_PASSWORD" \
+     -F vcf_file=@tests/fixtures/S5.panel.annotated.vcf \
      -F reference_build_hint=GRCh38 \
      http://localhost:8000/api/v1/vcf/analyze
 ```
@@ -94,22 +99,37 @@ three ways, and reports which:
 
 Otherwise: `422 reference_build_unresolved`, with the evidence in `detail`.
 
+When the reference FASTA is provisioned, normalization also checks every REF
+allele against it. A file whose bases contradict the chosen build (for example
+a GRCh37 file analysed as GRCh38) gets `422 reference_build_mismatch`, which
+says which build to choose, rather than a pipeline failure.
+
 Separately, a **corroboration check** always runs against gene spans that moved
 substantially between builds (BRAF, MYC, EGFR). It never changes the build — it
 raises a loud warning when the declared build contradicts the coordinates.
 
 ### Errors
 
-All errors return `{error_kind, message, detail?}`; `error_kind` maps directly to
-the frontend's error states.
+All errors, including authentication failures, return
+`{error_kind, message, detail?}`; `error_kind` maps directly to the frontend's
+error states. No response ever carries `WWW-Authenticate` (it would make the
+browser show its own login dialog over the app's).
 
 | Status | `error_kind` | Cause |
 |---|---|---|
-| 400 | `malformed_vcf` | Bad extension, empty file, unparseable, or unsupported caller |
-| 413 | `malformed_vcf` | Over the upload limit (default 500 MB) |
+| 400 | `malformed_vcf` | Bad extension, empty file, unparseable (incl. corrupt/truncated gzip, broken header), or unsupported caller |
+| 400 | `malformed_panel_bed` | The uploaded `panel_bed` is not a plain-text BED |
+| 401 | `unauthorized` | Missing or wrong demo credential. For uploads this is decided from the headers, before any of the body is read |
+| 413 | `malformed_vcf` | Over a size limit: upload (500 MB), decompressed size (2 GiB), or record count (20,000) |
 | 422 | `reference_build_unresolved` | No build hint and none can be confirmed |
+| 422 | `reference_build_mismatch` | The file's REF bases don't match the build it was analysed against (it was aligned to the other build); `detail` names the first mismatching locus and any build stated in the header |
 | 422 | `malformed_vcf` | Parsed fine but contained no variant records |
-| 500 | `annotation_failure` | An annotation subprocess failed |
+| 500 | `annotation_failure` | An annotation subprocess failed or ran out of the analysis time budget; `detail.incident_id` matches the server log |
+| 503 | `auth_not_configured` | No usable demo credential on the server (unset, placeholder, or under 12 characters) |
+| 503 | `annotation_failure` | At capacity: another analysis is running. Also decided before the body is read |
+
+Limits are set in the environment; `.env.example` lists every setting with its
+default.
 
 ## Pipeline stages
 
@@ -241,12 +261,16 @@ warning to every variant. Validate one before trusting it in production.
 - **No TMB.** A targeted panel can't support it. With a panel BED present, the
   service reports `panel_mutation_density` instead, carrying a disclaimer that it
   is not comparable to whole-exome TMB.
-- **No auth.** Do not expose this endpoint publicly or send it real patient data
-  until access control is added.
+- **Demo-grade auth only.** `/vcf/analyze` requires one shared credential
+  (`ONCOTRACE_DEMO_USERNAME` / `ONCOTRACE_DEMO_PASSWORD`, see `.env.example`),
+  rate-limited by nginx and backed by a fail2ban jail (`deploy/fail2ban/`).
+  That suits a private demo, not real patient data: there are no per-user
+  accounts or audit trail.
 
 ## Tests
 
 ```bash
+.venv/bin/pip install -r requirements-dev.txt   # once
 .venv/bin/python3 -m pytest tests/ -q
 ```
 

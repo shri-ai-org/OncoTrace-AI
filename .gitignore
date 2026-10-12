@@ -1,0 +1,40 @@
+# Repository-wide ignores. client/ and server/ each keep their own .gitignore
+# for stack-specific build output (dist/, .venv/, resources/ ...).
+
+# Archive of files removed from the codebase. Kept on disk for reference only,
+# never part of the deployable tree.
+un used files/
+
+# OS junk
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Editors / IDEs (per-developer settings)
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude Code per-developer settings (permissions, local paths)
+.claude/settings.json
+.claude/settings.local.json
+
+# Secrets and local overrides. client/.env and client/.env.production are
+# tracked on purpose: they hold only public, build-time VITE_* values.
+*.local
+.env.local
+.env.*.local
+server/.env
+# ...except the fail2ban jail, which is a deploy file (fail2ban's own .local
+# naming), not a local override: DEPLOY.md copies it from the repository.
+!server/deploy/fail2ban/oncotrace.local
+
+# Logs and test/coverage output
+logs/
+*.log
+coverage/
+.coverage
+htmlcov/

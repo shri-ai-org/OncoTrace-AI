@@ -12,7 +12,7 @@ additionally records which specific fields it used per file, so a reviewer can
 confirm the interpretation was correct for their caller.
 """
 
-from .base import CallerAdapter, NormalizedVariant
+from .base import CallerAdapter, NormalizedVariant, info_text
 from ._format_utils import get_format_value, infer_variant_type
 
 
@@ -110,19 +110,19 @@ class _SpecStandardAdapter(CallerAdapter):
         svlen = _info(variant, "SVLEN")
 
         return NormalizedVariant(
-            gene=_info(variant, "GENE"),
+            gene=info_text(_info(variant, "GENE")),
             chrom=str(variant.CHROM),
             pos=int(variant.POS),
             ref=variant.REF,
             alt=alt,
-            type=_info(variant, "TYPE") or infer_variant_type(variant.REF, alt, is_symbolic),
+            type=info_text(_info(variant, "TYPE")) or infer_variant_type(variant.REF, alt, is_symbolic),
             filter=list(variant.FILTERS) if variant.FILTERS else ["PASS"],
             vaf=vaf,
             depth=depth,
             alt_reads=alt_reads if alt_reads is not None else 0,
             is_symbolic=is_symbolic,
             mq=float(mq) if mq is not None else None,
-            svtype=_info(variant, "SVTYPE"),
+            svtype=info_text(_info(variant, "SVTYPE")),
             svlen=abs(int(svlen)) if svlen is not None else None,
             caller_warnings=[
                 f"{cls.name} adapter is unvalidated against a real {cls.name} file",

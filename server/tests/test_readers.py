@@ -3,6 +3,7 @@ import textwrap
 
 import pytest
 
+from app.core import config
 from app.pipeline import readers
 
 
@@ -138,3 +139,69 @@ def test_empty_file_is_rejected(tmp_path):
     path.write_text("")
     with pytest.raises(readers.UnsupportedFormatError):
         readers.detect_format(str(path))
+
+
+# ------------------------------------------------- hostile / oversized input
+
+def test_gzip_bomb_is_stopped_at_the_decompressed_size_cap(tmp_path, monkeypatch):
+    """~200 KB of gzip can expand to hundreds of MB; expansion must stop at the
+    cap rather than run to completion in memory or the temp dir."""
+    monkeypatch.setattr(config, "MAX_DECOMPRESSED_BYTES", 1024 * 1024)
+    bomb = tmp_path / "bomb.vcf.gz"
+    bomb.write_bytes(gzip.compress(VCF_TEXT.encode() + b"A" * (8 * 1024 * 1024)))
+    with pytest.raises(readers.InputTooLargeError):
+        readers.decompress_if_needed(str(bomb), tmp_path)
+
+
+def test_decompressed_size_cap_also_applies_to_tables(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "MAX_DECOMPRESSED_BYTES", 1024)
+    rows = "".join(f"KRAS\t12\t{25245350 + i}\tC\tT\n" for i in range(200))
+    path = tmp_path / "big.maf.gz"
+    path.write_bytes(gzip.compress(
+        ("Hugo_Symbol\tChromosome\tStart_Position\tReference_Allele\tTumor_Seq_Allele2\n" + rows).encode()
+    ))
+    with pytest.raises(readers.InputTooLargeError):
+        readers.read_tabular_variants(str(path))
+
+
+@pytest.mark.parametrize("damage", ["corrupt", "truncated"])
+def test_damaged_gzip_is_a_format_error_not_a_crash(tmp_path, damage):
+    data = gzip.compress(VCF_TEXT.encode() * 200)
+    data = data[:10] + b"\xff" * 32 + data[42:] if damage == "corrupt" else data[:-30]
+    path = tmp_path / "damaged.vcf.gz"
+    path.write_bytes(data)
+    with pytest.raises(readers.UnsupportedFormatError) as exc:
+        readers.detect_format(str(path))
+        readers.decompress_if_needed(str(path), tmp_path)
+    assert not isinstance(exc.value, readers.InputTooLargeError)
+    assert "corrupt or truncated" in str(exc.value)
+
+
+def test_table_over_the_record_cap_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "MAX_RECORDS", 2)
+    path = write(tmp_path, "x.maf", MAF_TEXT + "    BRAF\t7\t140753336\tA\tT\t1000\t850\t150\n")
+    with pytest.raises(readers.InputTooLargeError):
+        readers.read_tabular_variants(path)
+
+
+def test_table_at_the_record_cap_is_accepted(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "MAX_RECORDS", 2)
+    rows, _ = readers.read_tabular_variants(write(tmp_path, "x.maf", MAF_TEXT))
+    assert len(rows) == 2
+
+
+def test_overlong_line_is_rejected_without_reading_it_whole(tmp_path, monkeypatch):
+    monkeypatch.setattr(readers, "MAX_LINE_CHARS", 1000)
+    path = write(tmp_path, "x.maf", MAF_TEXT.rstrip() + "\tPAD" + "x" * 5000 + "\n")
+    with pytest.raises(readers.InputTooLargeError):
+        readers.read_tabular_variants(path)
+
+
+def test_format_sniffing_reads_a_bounded_prefix(tmp_path):
+    """A newline-free file is identified (or refused) from its first MB, not
+    read in full."""
+    path = tmp_path / "one-line.txt"
+    path.write_text("x" * (3 * 1024 * 1024))
+    with pytest.raises(readers.UnsupportedFormatError) as exc:
+        readers.detect_format(str(path))
+    assert len(exc.value.detail["detected_header"]) <= 400

@@ -1,42 +1,46 @@
 {
-  "name": "my-react-app",
+  "name": "oncotrace-ai-client",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "engines": {
-    "node": "^18.0.0 || ^20.0.0 || >=22.0.0"
+    "node": ">=20"
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && vite build --ssr src/entry-server.jsx && node scripts/prerender.mjs && node scripts/postbuild.mjs",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
+    "@fontsource-variable/outfit": "^5.3.0",
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "5.3.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.0",
-    "@tailwindcss/vite": "~4.1.18",
-    "framer-motion": "^12.38.0",
+    "@tabler/icons-react": "3.47.0",
+    "motion": "12.43.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-error-boundary": "^6.1.1",
-    "react-intersection-observer": "^10.0.3",
-    "react-router-dom": "^6.30.4",
+    "react-router-dom": "^6.30.6",
     "recharts": "^3.8.1",
     "three": "^0.160.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "1.63.0",
+    "@tailwindcss/vite": "~4.1.18",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
-    "autoprefixer": "^10.4.27",
     "eslint": "^9.39.1",
+    "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
-    "postcss": "^8.5.6",
     "tailwindcss": "~4.1.18",
     "vite": "^6.4.3"
   }

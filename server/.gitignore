@@ -11,3 +11,8 @@ __pycache__/
 # never committed. Populated locally via scripts/download_references.sh.
 resources/*
 !resources/.gitkeep
+
+# Test/coverage output and logs
+.coverage
+htmlcov/
+*.log

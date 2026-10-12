@@ -1,7 +1,12 @@
+import asyncio
 import base64
+import json
+import logging
 
+import pytest
 from fastapi.testclient import TestClient
 
+from app.api import routes_vcf
 from app.core import config
 from app.main import app
 
@@ -63,6 +68,7 @@ def test_401_never_sends_www_authenticate():
         client.post(VERIFY),
         client.post(VERIFY, headers=basic_auth_header(password="nope")),
         client.post(ANALYZE, files=A_FILE),
+        client.post(ANALYZE, files=A_FILE, headers=basic_auth_header(password="nope")),
         client.post(VERIFY, headers={"Authorization": "Basic !!!not-base64!!!"}),
         client.post(VERIFY, headers={"Authorization": "Bearer sometoken"}),
         client.post(VERIFY, headers={"Authorization": "Basic"}),
@@ -104,9 +110,102 @@ def test_unconfigured_server_fails_closed(monkeypatch):
     monkeypatch.setattr(config, "DEMO_AUTH_USERNAME", None)
     monkeypatch.setattr(config, "DEMO_AUTH_PASSWORD", None)
 
-    r = client.post(ANALYZE, files=A_FILE, headers=basic_auth_header())
-    assert r.status_code == 503
-    assert r.json()["detail"]["error_kind"] == "auth_not_configured"
+    for r in (
+        client.post(ANALYZE, files=A_FILE, headers=basic_auth_header()),
+        client.post(VERIFY, headers=basic_auth_header()),
+    ):
+        assert r.status_code == 503
+        assert r.json()["error_kind"] == "auth_not_configured"
+        assert "www-authenticate" not in {k.lower() for k in r.headers}
 
     # Health must stay up so an operator can still see the server is running.
     assert client.get("/api/v1/health").status_code == 200
+
+
+@pytest.mark.parametrize("password", ["change-me", "CHANGE-ME", "short-pw"])
+def test_placeholder_or_short_password_fails_closed(monkeypatch, password):
+    """The .env.example placeholder, or a password short enough to guess within
+    the rate limit, must not work as a login -- not even when sent exactly."""
+    monkeypatch.setattr(config, "DEMO_AUTH_PASSWORD", password)
+    r = client.post(VERIFY, headers=basic_auth_header(password=password))
+    assert r.status_code == 503
+    assert r.json()["error_kind"] == "auth_not_configured"
+    assert password.lower() not in r.text.lower()
+
+
+def test_auth_errors_use_the_flat_error_shape():
+    """The client reads top-level error_kind/message on every error, so auth
+    failures must not arrive wrapped in FastAPI's {"detail": ...}."""
+    expected = {"error_kind": "unauthorized", "message": "Invalid demo credentials."}
+    assert client.post(VERIFY).json() == expected
+    assert client.post(ANALYZE, files=A_FILE).json() == expected
+    assert client.post(ANALYZE, files=A_FILE, headers=basic_auth_header(password="nope")).json() == expected
+
+
+# ------------------------------------------------- pre-body gate on uploads
+
+def _call_analyze_raw(headers: list[tuple[bytes, bytes]]):
+    """Drives the ASGI app directly and fails if `receive` is ever called --
+    i.e. if any of the upload body would have been read."""
+    sent, body_reads = [], []
+
+    async def receive():
+        # Recorded rather than raised: FastAPI turns an exception while parsing
+        # the form into a plain 400, which would hide the read.
+        body_reads.append(True)
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {
+        "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+        "method": "POST", "scheme": "http", "path": ANALYZE, "raw_path": ANALYZE.encode(),
+        "root_path": "", "query_string": b"",
+        "headers": [
+            (b"host", b"testserver"),
+            (b"content-type", b"multipart/form-data; boundary=x"),
+            (b"content-length", b"524288000"),
+            *headers,
+        ],
+        "client": ("203.0.113.9", 50000), "server": ("testserver", 80),
+    }
+    asyncio.run(app(scope, receive, send))
+    assert not body_reads, "the request body was read before the request was allowed"
+    start = next(m for m in sent if m["type"] == "http.response.start")
+    body = b"".join(m.get("body", b"") for m in sent if m["type"] == "http.response.body")
+    return start["status"], {k.decode().lower() for k, _ in start["headers"]}, json.loads(body)
+
+
+def _raw_auth(password=TEST_PASSWORD):
+    return [(b"authorization", basic_auth_header(password=password)["Authorization"].encode())]
+
+
+@pytest.mark.parametrize("headers", [[], _raw_auth("nope"), [(b"authorization", b"Basic !!!")]])
+def test_unauthenticated_upload_is_refused_before_the_body_is_read(headers, caplog):
+    """FastAPI parses a multipart body BEFORE running route dependencies, so the
+    credential must be checked ahead of that -- otherwise anyone can stream a
+    500 MB body into the server's temp dir before being turned away."""
+    with caplog.at_level(logging.WARNING, logger="oncotrace.auth"):
+        status, header_names, body = _call_analyze_raw(headers)
+    assert status == 401
+    assert body == {"error_kind": "unauthorized", "message": "Invalid demo credentials."}
+    assert "www-authenticate" not in header_names
+    # The line deploy/fail2ban/ matches, with the real client address.
+    assert "demo auth failure from 203.0.113.9 /api/v1/vcf/analyze" in caplog.text
+
+
+def test_unconfigured_server_refuses_upload_before_the_body_is_read(monkeypatch):
+    monkeypatch.setattr(config, "DEMO_AUTH_PASSWORD", None)
+    status, header_names, body = _call_analyze_raw(_raw_auth())
+    assert status == 503
+    assert body["error_kind"] == "auth_not_configured"
+    assert "www-authenticate" not in header_names
+
+
+def test_upload_at_capacity_is_shed_before_the_body_is_read(monkeypatch):
+    """An authenticated upload that can only be shed must not be received first."""
+    monkeypatch.setattr(routes_vcf, "_analysis_slots", asyncio.Semaphore(0))
+    status, _, body = _call_analyze_raw(_raw_auth())
+    assert status == 503
+    assert "capacity" in body["message"]

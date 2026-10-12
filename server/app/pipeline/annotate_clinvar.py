@@ -13,11 +13,21 @@ from pathlib import Path
 
 from cyvcf2 import VCF
 
+from . import tool_budget
 from .normalize import ensure_contig_headers
 
 
 class ClinVarError(Exception):
     pass
+
+
+def _run(cmd: list[str], what: str, **kwargs) -> subprocess.CompletedProcess:
+    """subprocess.run within the analysis's tool budget; an overrun is a
+    ClinVarError like any other failure of this stage."""
+    try:
+        return subprocess.run(cmd, timeout=tool_budget.remaining(), **kwargs)
+    except subprocess.TimeoutExpired:
+        raise ClinVarError(f"{what} timed out (analysis tool budget exhausted)") from None
 
 
 # ClinVar's own review-status -> gold-star mapping, so users see the confidence
@@ -57,8 +67,8 @@ def _bgzip_and_index(vcf_path: str, reference_fasta: str) -> str:
     reconciled = ensure_contig_headers(vcf_path, vcf_path, reference_fasta)
 
     sorted_path = f"{reconciled}.sorted.vcf"
-    result = subprocess.run(
-        ["bcftools", "sort", "-O", "v", "-o", sorted_path, reconciled],
+    result = _run(
+        ["bcftools", "sort", "-O", "v", "-o", sorted_path, reconciled], "bcftools sort",
         capture_output=True, text=True,
     )
     if result.returncode != 0:
@@ -66,10 +76,10 @@ def _bgzip_and_index(vcf_path: str, reference_fasta: str) -> str:
 
     gz_path = f"{sorted_path}.gz"
     with open(gz_path, "wb") as out:
-        result = subprocess.run(["bgzip", "-c", sorted_path], stdout=out, stderr=subprocess.PIPE)
+        result = _run(["bgzip", "-c", sorted_path], "bgzip", stdout=out, stderr=subprocess.PIPE)
     if result.returncode != 0:
         raise ClinVarError(f"bgzip failed: {result.stderr.decode(errors='replace').strip()[:500]}")
-    result = subprocess.run(["tabix", "-f", "-p", "vcf", gz_path], capture_output=True, text=True)
+    result = _run(["tabix", "-f", "-p", "vcf", gz_path], "tabix", capture_output=True, text=True)
     if result.returncode != 0:
         raise ClinVarError(f"tabix failed: {result.stderr.strip()[:500]}")
     return gz_path
@@ -81,7 +91,7 @@ def annotate_with_clinvar(input_vcf: str, output_vcf: str, clinvar_vcf: str, ref
             f"ClinVar VCF not found at {clinvar_vcf}. Run scripts/download_references.sh to provision it."
         )
     indexed_input = _bgzip_and_index(input_vcf, reference_fasta)
-    result = subprocess.run(
+    result = _run(
         [
             "bcftools", "annotate",
             "-a", clinvar_vcf,
@@ -92,6 +102,7 @@ def annotate_with_clinvar(input_vcf: str, output_vcf: str, clinvar_vcf: str, ref
                    "INFO/AF_ESP,INFO/AF_EXAC,INFO/AF_TGP"),
             "-O", "v", "-o", output_vcf, indexed_input,
         ],
+        "bcftools annotate (ClinVar)",
         capture_output=True, text=True,
     )
     if result.returncode != 0:

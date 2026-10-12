@@ -17,10 +17,11 @@ from pathlib import Path
 from ..core import config, constants as C
 from ..pipeline import (
     annotate_civic, annotate_clinvar, annotate_snpeff, metrics, normalize, panel,
-    parse, provenance, qc_flags, tiers, validate, zygosity,
+    parse, provenance, qc_flags, tiers, tool_budget, validate, zygosity,
 )
 from ..pipeline.build_detection import (
-    _CHROM_LENGTHS, BuildUnresolvedError, corroborate_build, resolve_build,
+    _CHROM_LENGTHS, BuildMismatchError, BuildUnresolvedError, build_from_header,
+    corroborate_build, resolve_build,
 )
 
 RAN = "ran"
@@ -137,6 +138,8 @@ def analyze_vcf(upload_path: str, source_filename: str, reference_build_hint: st
                 sample_name: str | None = None, panel_bed_path: str | None = None) -> dict:
     workdir = Path(tempfile.mkdtemp(prefix="oncotrace-"))
     stages: dict[str, dict] = {}
+    # Every bcftools/SnpEff call below draws on this one time budget.
+    budget_token = tool_budget.start()
     try:
         # ---------- ingest: format handling ----------
         prepared_vcf, input_meta = parse.prepare_input(upload_path, workdir)
@@ -147,10 +150,14 @@ def analyze_vcf(upload_path: str, source_filename: str, reference_build_hint: st
         )
 
         # ---------- §8 structural validation (fail fast) ----------
+        # Before parsing, so a broken header is reported as such (cyvcf2 itself
+        # only raises a bare Exception); the adapter-specific INFO check needs
+        # the adapter parsing detects, so it follows the parse.
+        validation = validate.validate_vcf(prepared_vcf)
         probe_variants, probe_meta = parse.parse_vcf(
             prepared_vcf, allow_generic=config.ALLOW_GENERIC_CALLER, sample_name=sample_name
         )
-        validation = validate.validate_vcf(prepared_vcf, probe_meta["caller_adapter"])
+        validate.check_required_info(validation, probe_meta["caller_adapter"])
         stages["structural_validation"] = _stage(
             RAN, f"{len(validation['checks'])} structural check(s) passed"
         )
@@ -171,7 +178,7 @@ def analyze_vcf(upload_path: str, source_filename: str, reference_build_hint: st
         # ---------- §1 provenance mining ----------
         prov = provenance.mine_header(
             parse_meta.get("raw_header", ""),
-            supplied={"panel_or_target_regions": panel_bed_path},
+            supplied={"panel_or_target_regions": "panel BED uploaded with this request" if panel_bed_path else None},
         )
         stages["provenance_mining"] = _stage(
             RAN,
@@ -196,7 +203,15 @@ def analyze_vcf(upload_path: str, source_filename: str, reference_build_hint: st
         shutil.copyfile(prepared_vcf, working_vcf)
         if config.reference_ready(build):
             normalized = str(workdir / "normalized.vcf")
-            normalize.normalize_vcf(working_vcf, normalized, str(ref_fasta))
+            try:
+                normalize.normalize_vcf(working_vcf, normalized, str(ref_fasta))
+            except normalize.ReferenceMismatchError as exc:
+                # The file's REF bases contradict this build: it was aligned
+                # to another one. Reported to the user as such, not as a
+                # pipeline failure.
+                raise BuildMismatchError(
+                    build, build_source, build_from_header(parse_meta.get("raw_header", "")), exc.locus,
+                ) from exc
             working_vcf = normalized
             stages["normalization"] = _stage(RAN, "bcftools norm -m -any (left-aligned indels)")
         else:
@@ -440,4 +455,5 @@ def analyze_vcf(upload_path: str, source_filename: str, reference_build_hint: st
             },
         }
     finally:
+        tool_budget.end(budget_token)
         shutil.rmtree(workdir, ignore_errors=True)

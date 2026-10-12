@@ -7,6 +7,7 @@ from pathlib import Path
 
 from cyvcf2 import VCF
 
+from ..core import config
 from . import readers
 from .callers.detect import VALIDATED_ADAPTERS, detect_adapter
 
@@ -84,7 +85,13 @@ def parse_vcf(path: str, allow_generic: bool = True, sample_name: str | None = N
     chosen_sample, sample_idx, warnings = _pick_sample_index(vcf, adapter, sample_name)
 
     variants, record_errors = [], []
-    for record in vcf:
+    for n, record in enumerate(vcf, 1):
+        # Every record is held in memory from here to the JSON response, so the
+        # count is capped before an oversized file can exhaust the worker.
+        if n > config.MAX_RECORDS:
+            raise readers.InputTooLargeError(
+                f"This file has more than {config.MAX_RECORDS:,} variant records, the per-file limit."
+            )
         try:
             variants.append(adapter.to_normalized(record, sample_idx))
         except Exception as exc:

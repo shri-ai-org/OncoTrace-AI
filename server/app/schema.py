@@ -1,5 +1,5 @@
 """Pydantic response models. Mirrors the JSON shape the frontend's page
-components already consume (see client/src/components/liquidbiopsy/mockData.js),
+components already consume (see client/src/features/liquidbiopsy/mockData.js),
 so switching the frontend from mock mode to this backend requires no page
 component changes.
 """

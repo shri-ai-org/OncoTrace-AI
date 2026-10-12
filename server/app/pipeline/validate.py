@@ -23,7 +23,13 @@ class StructuralValidationError(Exception):
 
 def validate_vcf(path: str, adapter_name: str | None = None) -> dict:
     """Structural checks before any analysis. Returns a report of what passed;
-    raises StructuralValidationError on a hard failure."""
+    raises StructuralValidationError on a hard failure.
+
+    Runs BEFORE parse.parse_vcf: cyvcf2 rejects a broken header (e.g. no #CHROM
+    line) with a bare Exception, which has to surface as the specific
+    structural error below rather than as a 500. The adapter is only known
+    after parsing, so its required-INFO check can follow separately via
+    check_required_info()."""
     try:
         vcf = VCF(path)
     except Exception as exc:
@@ -66,21 +72,28 @@ def validate_vcf(path: str, adapter_name: str | None = None) -> dict:
     })
 
     info_ids = {rec["ID"] for rec in vcf.header_iter() if rec.type == "INFO" and "ID" in rec.info()}
+    report = {"checks": checks, "contigs": contigs, "samples": samples,
+              "declared_info_fields": sorted(info_ids)}
+    if adapter_name:
+        check_required_info(report, adapter_name)
+    return report
+
+
+def check_required_info(report: dict, adapter_name: str) -> None:
+    """The caller-specific half of validation: fails if the header lacks an INFO
+    field the detected adapter depends on, else records the check in `report`."""
     required = REQUIRED_INFO_BY_ADAPTER.get(adapter_name or "", [])
-    missing_info = [f for f in required if f not in info_ids]
+    missing_info = [f for f in required if f not in report["declared_info_fields"]]
     if missing_info:
         raise StructuralValidationError(
             f"This file is identified as {adapter_name} output but its header does not declare "
             f"required INFO field(s): {', '.join(missing_info)}.",
             {"adapter": adapter_name, "missing_info_fields": missing_info,
-             "declared_info_fields": sorted(info_ids)[:60]},
+             "declared_info_fields": report["declared_info_fields"][:60]},
         )
     if required:
-        checks.append({"check": f"required_info_fields_for_{adapter_name}", "status": "pass",
-                       "detail": f"present: {', '.join(required)}"})
-
-    return {"checks": checks, "contigs": contigs, "samples": samples,
-            "declared_info_fields": sorted(info_ids)}
+        report["checks"].append({"check": f"required_info_fields_for_{adapter_name}", "status": "pass",
+                                 "detail": f"present: {', '.join(required)}"})
 
 
 def check_contig_consistency(variants, build: str, chrom_lengths: dict) -> dict:

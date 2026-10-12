@@ -1,341 +1,164 @@
-// App.jsx
-import { lazy, Suspense, useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 
-import Navbar        from './components/Navbar';
-import HeroSection   from './components/HeroSection';
-import Mammogram     from './components/Mammogram';
-import ProblemSection     from './components/ProblemSection';
-import SolutionSection    from './components/SolutionSection';
-import CaseStudySection   from './components/CaseStudySection';
-import TeamSection        from './components/TeamSection';
-import Footer             from './components/Footer';
-import LiquidBiopsySection from './components/LiquidBiopsySection';
-import SampleReportSection from './components/SampleReportSection';
-import DemoAuthGate        from './components/liquidbiopsy/auth/DemoAuthGate';
+import Navbar               from './components/layout/Navbar';
+import SiteFooter           from './components/layout/SiteFooter';
+import RouteLoadingFallback from './components/common/RouteLoadingFallback';
+import HomePage             from './pages/HomePage';
+import NotFound             from './pages/NotFound';
+import { NAV_H }            from './lib/layout';
+import { applyRouteMeta }   from './lib/seo';
+import { scrollBehavior }   from './lib/scroll';
 
-// Code-split by route/section: none of these are needed for the initial
-// homepage paint, so every visitor previously downloaded and parsed all of
-// them (three.js, recharts, emailjs) up front regardless of which page they
-// actually wanted. Splitting means each chunk loads only when its route or
-// section is reached.
+// Code-split by route: only the home page ships in the entry bundle. Each
+// chunk below downloads when its route is first visited.
 //
-// DNA3DSection: three.js + @react-three/fiber is ~870KB alone. It already
-// wraps its own <Canvas> in an ErrorBoundary and gates the model load behind
-// an IntersectionObserver, so the Suspense boundary below only covers the
-// brief gap while the JS chunk itself downloads.
-const DNA3DSection      = lazy(() => import('./components/DNA3DSection'));
-// The gated analysis dashboard: pulls in recharts (~280KB) for charts no
-// other page uses.
-const LiquidBiopsyDemo  = lazy(() => import('./components/liquidbiopsy'));
-// Booking forms: pull in @emailjs/browser, used nowhere else pre-submission.
-const Mammodemo           = lazy(() => import('./components/Mammodemo'));
-const LiquidBiopsyBooking = lazy(() => import('./components/LiquidBiopsyBooking'));
+// /demo: the gated analysis dashboard and its sign-in gate (API client,
+// recharts, dashboard pages). The gate is lazy too; nothing else uses it.
+const DemoAuthGate        = lazy(() => import('./features/liquidbiopsy/auth/DemoAuthGate'));
+const LiquidBiopsyDemo    = lazy(() => import('./features/liquidbiopsy'));
+// Public booking forms (pull in @emailjs/browser).
+const MammogramBooking    = lazy(() => import('./pages/Booking/MammogramBooking'));
+const LiquidBiopsyBooking = lazy(() => import('./pages/Booking/LiquidBiopsyBooking'));
 // Blog: separate content area, irrelevant to a first-time product visitor.
 const Blog     = lazy(() => import('./pages/Blog/Blog'));
 const BlogPost = lazy(() => import('./pages/Blog/BlogPost'));
 
-/* ── Navbar height token ──
-   Navbar.jsx defines --nav-h responsively (it shrinks on small screens) and
-   scrolls/offsets against it; page content below must offset by the same
-   var so the fixed header never overlaps it at any breakpoint. */
-const NAV_H = 'var(--nav-h, 108px)';
-
-/* ─────────────────────────────────────────────
-   Section anchor helper
-   Usage: <Section id="mammogram"> … </Section>
-   Just carries the id for scroll targeting — the
-   fixed-navbar offset itself is applied once,
-   globally, via `scroll-padding-top` and
-   SCROLL_OFFSET in Navbar.jsx. Baking a second
-   offset in here would double-count it and land
-   scrolls with a large empty gap under the navbar.
-───────────────────────────────────────────── */
-function Section({ id, children, className = '' }) {
-  return (
-    <div id={id} className={`relative ${className}`}>
-      {children}
-    </div>
-  );
+function pageFromPath(pathname) {
+  if (pathname === '/')              return 'home';
+  if (pathname === '/Book-LB')       return 'lb';
+  if (pathname === '/demo')          return 'demo';
+  if (pathname === '/mammo-demo')    return 'mammo';
+  if (pathname === '/blog' || pathname.startsWith('/blog/')) return 'blog';
+  // Unknown path: the Navbar shows its "Back to Home" variant instead of
+  // home-section links that would have nothing to scroll to.
+  return 'notfound';
 }
 
-/* ─────────────────────────────────────────────
-   HOME PAGE
-───────────────────────────────────────────── */
-function HomePage({ onNavigate }) {
-  const location = useLocation();
-  const didMount = useRef(false);
+const ROUTE_FOR = { demo: '/demo', lb: '/Book-LB', mammo: '/mammo-demo', blog: '/blog', home: '/' };
 
-  useEffect(() => {
-    const params  = new URLSearchParams(location.search);
-    const section = params.get('section') || location.hash?.replace('#', '');
+/* React Router matches paths case-insensitively and ignores a trailing slash,
+   so /demo/, /book-lb or /Blog render the real page, while pageFromPath and
+   applyRouteMeta (exact matches) treat them as unknown: "Page not found"
+   meta, noindex, and the site navbar drawn over the /demo dashboard. Such
+   variants are redirected to the one canonical spelling instead. A blog slug
+   keeps its case (slugs are matched exactly); only the /blog prefix is fixed. */
+const CANONICAL_PATHS = ['/Book-LB', '/demo', '/mammo-demo', '/blog'];
 
-    // On first mount with no target → ensure we're at the top
-    if (!section || section === 'home') {
-      if (!didMount.current) window.scrollTo({ top: 0, behavior: 'auto' });
-      didMount.current = true;
-      return;
-    }
-
-    didMount.current = true;
-
-    // Small delay so the DOM is fully painted before we scroll
-    const raf = requestAnimationFrame(() => {
-      setTimeout(() => {
-        const el = document.getElementById(section);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 80);
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [location.search, location.hash]);
-
-  return (
-    <main
-      className="min-h-screen bg-white"
-      /* push content below the fixed navbar */
-      style={{ paddingTop: NAV_H }}
-    >
-      {/* Hero — occupies full viewport height naturally */}
-      <div id="home">
-        <HeroSection onNavigate={onNavigate} />
-      </div>
-
-      <Section id="sample-report">
-        <SampleReportSection />
-      </Section>
-
-      {/* Breathing room */}
-      <div style={{ height: '8rem', background: '#fff' }} />
-
-      <Suspense fallback={null}>
-        <DNA3DSection />
-      </Suspense>
-
-      <Section id="mammogram">
-        <Mammogram />
-      </Section>
-
-      <Section id="liquid-biopsy">
-        <LiquidBiopsySection />
-      </Section>
-
-      <ProblemSection />
-
-      <Section id="solution">
-        <SolutionSection />
-      </Section>
-
-      <Section id="case-study">
-        <CaseStudySection />
-      </Section>
-
-      <Section id="team">
-        <TeamSection />
-      </Section>
-      <Footer />
-    </main>
-  );
+function canonicalPath(pathname) {
+  const path = pathname.replace(/\/+$/, '') || '/';
+  const lower = path.toLowerCase();
+  if (lower.startsWith('/blog/')) return '/blog' + path.slice('/blog'.length);
+  return CANONICAL_PATHS.find((p) => p.toLowerCase() === lower) ?? path;
 }
 
-/* ─────────────────────────────────────────────
-   INNER APP
-───────────────────────────────────────────── */
-function AppInner() {
+/* Everything below the router. Exported separately so the prerender entry
+   (entry-server.jsx) can mount it under a StaticRouter while the browser
+   mounts it under BrowserRouter (default export below). */
+export function AppRoutes() {
+  const { pathname, search, hash } = useLocation();
+  const canonical = canonicalPath(pathname);
+
+  // Redirect before anything else renders, so the navbar variant and the
+  // route meta only ever see the canonical path.
+  if (canonical !== pathname) {
+    return <Navigate replace to={{ pathname: canonical, search, hash }} />;
+  }
+  return <SiteRoutes />;
+}
+
+function SiteRoutes() {
   const navigate = useNavigate();
   const location = useLocation();
+  const currentPage = pageFromPath(location.pathname);
 
-  const currentPage =
-    location.pathname === '/Book-LB'              ? 'lb'    :
-    location.pathname === '/demo'                 ? 'demo'  :
-    location.pathname === '/mammo-demo'           ? 'mammo' :
-    location.pathname === '/blog'                 ? 'blog'  :
-    location.pathname.startsWith('/blog/')        ? 'blog'  : 'home';
+  // Title, description, canonical and robots for the current route.
+  useEffect(() => {
+    applyRouteMeta(location.pathname);
+  }, [location.pathname]);
 
   const handleNavigate = (to) => {
-    switch (to) {
-      case 'demo':
-        navigate('/demo');
-        window.scrollTo({ top: 0, behavior: 'auto' });
-        break;
-      case 'lb':
-        navigate('/Book-LB');
-        window.scrollTo({ top: 0, behavior: 'auto' });
-        break;
-      case 'mammo':
-        navigate('/mammo-demo');
-        window.scrollTo({ top: 0, behavior: 'auto' });
-        break;
-      case 'blog':
-        navigate('/blog');
-        window.scrollTo({ top: 0, behavior: 'auto' });
-        break;
-      case 'home':
-        navigate('/');
-        window.scrollTo({ top: 0, behavior: 'auto' });
-        break;
-      default: {
-        // Section scroll target
-        if (location.pathname !== '/') {
-          navigate(`/?section=${to}`);
-        } else {
-          requestAnimationFrame(() => {
-            const el = document.getElementById(to);
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          });
-        }
-        break;
-      }
+    if (ROUTE_FOR[to]) {
+      navigate(ROUTE_FOR[to]);
+      // A new page starts at the top: no animated scroll through it.
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      return;
+    }
+    // Otherwise `to` is a home-page section id.
+    if (location.pathname !== '/') {
+      navigate(`/?section=${to}`);
+    } else {
+      requestAnimationFrame(() => {
+        document.getElementById(to)?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
+      });
     }
   };
 
-  // The liquid biopsy DASHBOARD (/demo) is a full-screen app experience with
-  // its own fixed sidebar/header, not another marketing page — it owns its own
-  // chrome (including a working "back to site" button, wired via onBack)
-  // rather than sitting underneath the site Navbar. Keeping the global Navbar
-  // mounted here put a z-index:10001 element on top of the dashboard's own
-  // fixed sidebar, silently intercepting clicks on it.
-  //
-  // /Book-LB is a booking FORM, not the dashboard, so it keeps the Navbar —
-  // matching /mammo-demo's own booking-form route below.
+  // The liquid biopsy DASHBOARD (/demo) is a full-screen app with its own fixed
+  // sidebar/header and a working "back to site" button (onBack). Keeping the
+  // global Navbar mounted there put a z-index:10001 element on top of the
+  // dashboard's sidebar, silently intercepting clicks on it. The booking forms
+  // are ordinary pages and keep the Navbar and footer.
   const isFullScreenApp = currentPage === 'demo';
 
   return (
-    <>
+    <div className="ot-site">
       {!isFullScreenApp && <Navbar currentPage={currentPage} onNavigate={handleNavigate} />}
 
-      {/* One boundary for every route below: only the routes that are
-          actually lazy (demo, Book-LB, mammo-demo, blog/*) suspend here --
-          HomePage's own import is static, so navigating to "/" never shows
-          this fallback. Kept minimal/branded rather than a blank flash. */}
+      {/* One boundary for every lazy route (and the footer below them).
+          HomePage is a static import, so "/" never shows this fallback. */}
       <Suspense fallback={<RouteLoadingFallback />}>
-      <Routes>
-        <Route
-          path="/"
-          element={<HomePage onNavigate={handleNavigate} />}
-        />
+        <Routes>
+          <Route path="/" element={<HomePage onNavigate={handleNavigate} />} />
 
-        <Route
-          path="/demo"
-          element={
-            <DemoAuthGate onRequestAccess={() => handleNavigate('lb')}>
-              <LiquidBiopsyDemo onBack={() => handleNavigate('home')} />
-            </DemoAuthGate>
-          }
-        />
+          <Route
+            path="/demo"
+            element={
+              <DemoAuthGate onRequestAccess={() => handleNavigate('lb')}>
+                <LiquidBiopsyDemo onBack={() => handleNavigate('home')} />
+              </DemoAuthGate>
+            }
+          />
 
-        <Route
-          path="/Book-LB"
-          element={
-            <div style={{ paddingTop: NAV_H }}>
-              <LiquidBiopsyBooking onBack={() => handleNavigate('home')} />
-            </div>
-          }
-        />
+          <Route
+            path="/Book-LB"
+            element={
+              <div style={{ paddingTop: NAV_H }}>
+                <LiquidBiopsyBooking onBack={() => handleNavigate('home')} />
+              </div>
+            }
+          />
 
-        {/* Public booking form, deliberately not behind DemoAuthGate: it exists
-            to capture leads from people who don't have access yet, so gating
-            it behind the same shared credential as the real analysis engine
-            would ask visitors for the very thing they're trying to request. */}
-        <Route
-          path="/mammo-demo"
-          element={
-            <div style={{ paddingTop: NAV_H }}>
-              <Mammodemo onBack={() => handleNavigate('home')} />
-            </div>
-          }
-        />
+          {/* Public booking form, deliberately not behind DemoAuthGate: it exists
+              to capture leads from people who don't have access yet. */}
+          <Route
+            path="/mammo-demo"
+            element={
+              <div style={{ paddingTop: NAV_H }}>
+                <MammogramBooking onBack={() => handleNavigate('home')} />
+              </div>
+            }
+          />
 
-        {/* Blog Routes */}
-        <Route
-          path="/blog"
-          element={<Blog />}
-        />
+          <Route path="/blog" element={<Blog />} />
+          <Route path="/blog/:slug" element={<BlogPost />} />
 
-        <Route
-          path="/blog/:slug"
-          element={<BlogPost />}
-        />
+          <Route path="*" element={<NotFound onNavigate={handleNavigate} />} />
+        </Routes>
 
-        <Route
-          path="*"
-          element={<NotFound onNavigate={handleNavigate} />}
-        />
-      </Routes>
+        {/* Inside the boundary so it appears together with the page: outside,
+            it painted right under the loading placeholder of a lazy route and
+            was pushed down when the page arrived (layout shift). */}
+        {!isFullScreenApp && <SiteFooter onNavigate={handleNavigate} />}
       </Suspense>
-    </>
-  );
-}
-
-// Minimal, brand-neutral placeholder while a lazy route chunk downloads.
-// Full-viewport-height-agnostic (no fixed height) so it never causes a
-// visible layout jump when the real route content mounts in its place.
-function RouteLoadingFallback() {
-  return (
-    <div
-      role="status"
-      aria-label="Loading"
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        minHeight: '60vh', color: '#94a3b8', fontSize: '0.875rem',
-      }}
-    >
-      Loading…
     </div>
   );
 }
 
-/* ─────────────────────────────────────────────
-   404
-───────────────────────────────────────────── */
-function NotFound({ onNavigate }) {
-  return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center bg-slate-50 px-4"
-      style={{ fontFamily: "'DM Sans', sans-serif", paddingTop: NAV_H }}
-    >
-      <span className="text-6xl mb-6" role="img" aria-label="microscope">🔬</span>
-      <h1
-        className="text-5xl font-bold text-slate-900 mb-3 tracking-tight"
-        style={{ fontFamily: "'Outfit', sans-serif" }}
-      >
-        404
-      </h1>
-      <p className="text-slate-400 text-sm mb-8 text-center max-w-xs leading-relaxed">
-        This page doesn't exist. Head back to the platform.
-      </p>
-      <button
-        onClick={() => onNavigate('home')}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 8,
-          padding: '12px 28px', borderRadius: 12,
-          background: '#2563eb', color: '#fff',
-          fontSize: '0.9375rem', fontWeight: 600,
-          border: 'none', cursor: 'pointer',
-          transition: 'all 0.2s ease',
-          boxShadow: '0 4px 16px rgba(37,99,235,0.3)',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'translateY(-2px)';
-          e.currentTarget.style.boxShadow = '0 8px 24px rgba(37,99,235,0.4)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = '';
-          e.currentTarget.style.boxShadow = '0 4px 16px rgba(37,99,235,0.3)';
-        }}
-      >
-        ← Back to Home
-      </button>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────
-   ROOT
-───────────────────────────────────────────── */
 export default function App() {
   return (
     <BrowserRouter>
-      <AppInner />
+      <AppRoutes />
     </BrowserRouter>
   );
 }

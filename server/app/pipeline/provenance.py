@@ -13,7 +13,6 @@ reading the header by hand; it now happens on every ingest.
 """
 
 import re
-from pathlib import Path
 
 # Header lines that record a command line or tool provenance.
 _COMMAND_LINE_PREFIXES = (
@@ -71,9 +70,14 @@ def _tool_of(header_line: str) -> str:
 def mine_header(raw_header: str, supplied: dict[str, str | None] | None = None) -> dict:
     """Extracts external-file references from a VCF header.
 
-    `supplied` maps a role -> path for inputs the caller actually provided this
-    run (e.g. {"panel_or_target_regions": "/tmp/uploaded.bed"}), so a reference
-    can be reported as satisfied.
+    `supplied` maps a role -> a short label for inputs the caller actually
+    provided this run (e.g. {"panel_or_target_regions": "panel BED uploaded with
+    this request"}), so a reference can be reported as satisfied. A label, never
+    a server path: this ends up in the response.
+
+    Referenced paths are reported, never looked up: they come from the uploaded
+    header, and checking whether they exist on this server would let any upload
+    probe the server's filesystem.
     """
     supplied = supplied or {}
     references: list[dict] = []
@@ -103,21 +107,16 @@ def mine_header(raw_header: str, supplied: dict[str, str | None] | None = None) 
                 continue
             seen.add(key)
 
-            supplied_path = supplied.get(role)
-            # A reference is satisfied if the exact path exists, or the caller
-            # supplied an equivalent for that role this run.
-            exists_locally = Path(path).exists()
-            status = (
-                "supplied_this_run" if supplied_path else
-                "found_on_server" if exists_locally else
-                "not_supplied"
-            )
+            # Satisfied only if the caller supplied an equivalent for that role
+            # this run.
+            supplied_label = supplied.get(role)
+            status = "supplied_this_run" if supplied_label else "not_supplied"
             references.append({
                 "referenced_path": path,
                 "role": role,
                 "referenced_by": tool,
                 "status": status,
-                "resolved_with": supplied_path,
+                "resolved_with": supplied_label,
                 "impact_if_missing": None if status != "not_supplied" else impact,
             })
 

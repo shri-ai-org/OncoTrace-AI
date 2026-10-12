@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from app.pipeline import normalize
+from app.core import config
+from app.pipeline import annotate_clinvar, annotate_snpeff, normalize, tool_budget
 
 
 def write(tmp_path, name, content):
@@ -129,3 +130,54 @@ def test_normalize_still_raises_normalization_error_for_a_truly_unmatched_contig
 
     with pytest.raises(normalize.NormalizationError, match="bcftools norm failed"):
         normalize.normalize_vcf(bogus_vcf, output_vcf, reference_fasta)
+
+
+def test_normalize_reports_a_ref_allele_mismatch_as_its_own_error(tmp_path):
+    """REF bases that contradict the reference (a file aligned to another
+    build) raise ReferenceMismatchError carrying the locus, so the API can tell
+    the user to choose the right build instead of reporting a pipeline fault."""
+    reference_fasta = _build_reference(tmp_path)
+    # Contig 1 is ACGT repeated, so position 1 is A and REF=T contradicts it.
+    vcf = write(tmp_path, "input.vcf", """
+        ##fileformat=VCFv4.2
+        ##contig=<ID=1,length=40>
+        #CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO
+        1\t1\t.\tT\tG\t.\tPASS\t.
+        """)
+    with pytest.raises(normalize.ReferenceMismatchError) as caught:
+        normalize.normalize_vcf(vcf, str(tmp_path / "normalized.vcf"), reference_fasta)
+    assert caught.value.locus == "1:1"
+
+
+# ------------------------------------------------------- shared tool budget
+
+def test_exhausted_tool_budget_is_a_stage_error_not_a_hang(tmp_path, monkeypatch):
+    """Every external tool runs under the analysis's time budget; running out
+    surfaces as the stage's own error (an incident-id 500), never an nginx 504."""
+    monkeypatch.setattr(config, "TOOL_BUDGET_SECONDS", 0)
+    vcf = write(tmp_path, "in.vcf", CHR_PREFIXED_VCF)
+    with pytest.raises(normalize.NormalizationError, match="timed out"):
+        normalize._used_contigs(vcf)
+    with pytest.raises(annotate_clinvar.ClinVarError, match="timed out"):
+        annotate_clinvar._run(["sleep", "5"], "sleep")
+    jar = tmp_path / "snpEff.jar"
+    jar.write_bytes(b"")
+    with pytest.raises(annotate_snpeff.SnpEffError, match="timed out"):
+        annotate_snpeff.run_snpeff(vcf, str(tmp_path / "out.vcf"), str(jar), "GRCh38.105", str(tmp_path))
+
+
+def test_tool_budget_is_shared_across_calls(monkeypatch):
+    monkeypatch.setattr(config, "TOOL_BUDGET_SECONDS", 100)
+    now = [1000.0]
+    monkeypatch.setattr(tool_budget.time, "monotonic", lambda: now[0])
+    token = tool_budget.start()
+    try:
+        assert tool_budget.remaining() == 100
+        now[0] += 70   # e.g. SnpEff took 70s
+        assert tool_budget.remaining() == 30
+        now[0] += 70
+        assert tool_budget.remaining() == 0
+    finally:
+        tool_budget.end(token)
+    # Outside an analysis each call gets the whole budget.
+    assert tool_budget.remaining() == 100

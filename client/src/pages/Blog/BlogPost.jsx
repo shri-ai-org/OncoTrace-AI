@@ -2,11 +2,14 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getPostBySlug, getRelatedPosts } from './blogData';
+import { IconArrowLeft, IconBrandFacebook, IconBrandLinkedin, IconBrandX, IconClock, IconLink, IconPhotoOff, IconStarFilled } from '@tabler/icons-react';
+import { NAV_H } from '../../lib/layout';
 
-const NAV_H = 108;
 
-// Professional Image Component
-function BlogImage({ src, alt, caption }) {
+// Professional Image Component. Render it keyed by src: BlogPost stays mounted
+// when switching posts, so an index key handed one post's loaded/error state
+// to the next post's image.
+function BlogImage({ src, alt, caption, width, height }) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
 
@@ -24,7 +27,10 @@ function BlogImage({ src, alt, caption }) {
           <img
             src={src}
             alt={alt}
+            width={width}
+            height={height}
             loading="lazy"
+            decoding="async"
             onLoad={() => setIsLoaded(true)}
             onError={() => setHasError(true)}
             className={`
@@ -36,9 +42,7 @@ function BlogImage({ src, alt, caption }) {
         ) : (
           <div className="flex items-center justify-center h-64 md:h-96 bg-slate-100">
             <div className="text-center px-4">
-              <svg className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-3 md:mb-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
+              <IconPhotoOff size={44} stroke={1.5} aria-hidden="true" className="mx-auto mb-3 text-hairline-strong" />
               <p className="text-xs md:text-sm text-slate-600 font-medium">Image not available</p>
             </div>
           </div>
@@ -95,12 +99,16 @@ export default function BlogPost() {
   }
 
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'auto' });
+    // 'instant', not 'auto': 'auto' inherits the page's CSS smooth scrolling,
+    // which animated all the way up from the related-posts section.
+    window.scrollTo({ top: 0, behavior: 'instant' });
 
     const currentPost = getPostBySlug(slug);
 
     if (!currentPost) {
-      navigate('/blog');
+      // replace: keeping the unknown URL in history would make Back bounce
+      // straight here again.
+      navigate('/blog', { replace: true });
       return;
     }
 
@@ -148,8 +156,10 @@ export default function BlogPost() {
 
   }, [slug, navigate]);
 
+  // Post dates are plain 'YYYY-MM-DD', which Date parses as UTC midnight;
+  // format in UTC too, or time zones west of UTC show the previous day.
   const formatDate = (dateString) => {
-    const options = { year: 'numeric', month: 'long', day: 'numeric' };
+    const options = { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' };
     return new Date(dateString).toLocaleDateString('en-US', options);
   };
 
@@ -169,10 +179,13 @@ export default function BlogPost() {
         setShareTooltip('Copied!');
         setTimeout(() => setShareTooltip(''), 2000);
       } catch (err) {
+        // Clipboard denied or unavailable (e.g. not a secure context).
         console.error('Failed to copy:', err);
+        setShareTooltip("Couldn't copy link");
+        setTimeout(() => setShareTooltip(''), 3000);
       }
     } else {
-      window.open(shareUrls[platform], '_blank', 'width=600,height=400');
+      window.open(shareUrls[platform], '_blank', 'noopener,noreferrer,width=600,height=400');
     }
   };
 
@@ -186,7 +199,7 @@ export default function BlogPost() {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ paddingTop: NAV_H }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 md:h-12 md:w-12 border-b-2 border-blue-600 mx-auto mb-3 md:mb-4"></div>
+          <div className="animate-spin rounded-full h-10 w-10 md:h-12 md:w-12 border-b-2 border-brand mx-auto mb-3 md:mb-4"></div>
           <p className="text-sm md:text-base text-slate-600">Loading...</p>
         </div>
       </div>
@@ -196,58 +209,56 @@ export default function BlogPost() {
   return (
     <main
       className="min-h-screen bg-white"
-      style={{ paddingTop: NAV_H, fontFamily: "'DM Sans', sans-serif" }}
+      style={{ paddingTop: NAV_H }}
     >
       {/* Breadcrumbs */}
-      <div className="max-w-[1400px] mx-auto px-4 md:px-6 pt-6 md:pt-8">
-        <nav className="flex items-center gap-1.5 md:gap-2 text-xs md:text-sm text-slate-600 mb-6 md:mb-8">
+      <div className="mx-auto max-w-[52rem] px-4 pt-8 md:px-6 md:pt-10">
+        <nav aria-label="Breadcrumb" className="mb-6 flex items-center gap-2 text-[0.8125rem] text-muted md:mb-8">
           <button
             onClick={() => navigate('/')}
-            className="hover:text-blue-600 transition-colors duration-200"
+            className="rounded transition-colors hover:text-brand"
           >
             Home
           </button>
           <span>/</span>
           <button
             onClick={() => navigate('/blog')}
-            className="hover:text-blue-600 transition-colors duration-200"
+            className="rounded transition-colors hover:text-brand"
           >
             Blog
           </button>
           <span>/</span>
-          <span className="text-slate-900 font-medium truncate max-w-[150px] md:max-w-none">{post.title.substring(0, 30)}...</span>
+          <span aria-current="page" className="min-w-0 truncate font-medium text-ink">{post.title}</span>
         </nav>
       </div>
 
       {/* Article Header */}
-      <article className="max-w-[1400px] mx-auto px-4 md:px-6 pb-16 md:pb-20">
+      <article className="mx-auto max-w-[52rem] px-4 pb-16 md:px-6 md:pb-20">
         <header className="mb-10 md:mb-12 pb-6 md:pb-8 border-b border-slate-200">
           <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
-            <span className="px-2.5 py-0.5 md:px-3 md:py-1 text-[0.65rem] md:text-xs font-semibold tracking-wide uppercase bg-blue-100 text-blue-600 rounded-lg">
+            <span className="ot-tech rounded-md bg-brand-soft px-2 py-1 uppercase tracking-[0.06em] text-brand">
               {post.category}
             </span>
             {post.featured && (
-              <span className="inline-flex items-center gap-1 md:gap-1.5 px-2.5 py-0.5 md:px-3 md:py-1 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-[0.65rem] md:text-xs font-bold rounded-full">
-                <svg className="w-2.5 h-2.5 md:w-3 md:h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
+              <span className="inline-flex items-center gap-1 text-[0.75rem] font-semibold text-ink-2">
+                <IconStarFilled size={13} aria-hidden="true" className="text-amber-500" />
                 Featured
               </span>
             )}
           </div>
 
-          <h1 className="text-2xl md:text-4xl lg:text-5xl font-black text-slate-900 mb-4 md:mb-6 leading-tight tracking-tight">
+          <h1 className="ot-display mb-5 text-[clamp(1.875rem,1.3rem+2.4vw,3rem)]">
             {post.title}
           </h1>
 
-          <p className="text-base md:text-xl text-slate-600 leading-relaxed mb-6 md:mb-8">
+          <p className="ot-lead mb-8">
             {post.subtitle}
           </p>
 
           <div className="flex flex-wrap items-center justify-between gap-3 md:gap-4 text-xs md:text-sm text-slate-600">
             <div className="flex items-center gap-4 md:gap-6">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-xs md:text-sm">
+                <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-brand flex items-center justify-center text-white font-semibold text-xs md:text-sm">
                   OT
                 </div>
                 <div>
@@ -257,62 +268,58 @@ export default function BlogPost() {
               </div>
 
               <div className="flex items-center gap-1 text-slate-500">
-                <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                <IconClock size={15} stroke={1.75} aria-hidden="true" />
                 <span className="text-xs md:text-sm">{post.readTime} min read</span>
               </div>
             </div>
 
             {/* Share Buttons */}
             <div className="flex items-center gap-1.5 md:gap-2">
-              <span className="text-[0.65rem] md:text-xs font-semibold uppercase tracking-wide text-slate-400 mr-1 hidden sm:inline">Share:</span>
+              <span className="text-[0.65rem] md:text-xs font-semibold uppercase tracking-wide text-muted mr-1 hidden sm:inline">Share:</span>
               
               <button
                 onClick={() => handleShare('twitter')}
-                className="p-1.5 md:p-2 rounded-lg bg-slate-100 hover:bg-blue-100 hover:text-blue-600 transition-all duration-200"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-hairline bg-white text-body transition-colors hover:border-hairline-strong hover:text-brand"
                 aria-label="Share on Twitter"
               >
-                <svg className="w-3 h-3 md:w-4 md:h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z" />
-                </svg>
+                <IconBrandX size={17} stroke={1.75} aria-hidden="true" />
               </button>
 
               <button
                 onClick={() => handleShare('linkedin')}
-                className="p-1.5 md:p-2 rounded-lg bg-slate-100 hover:bg-blue-100 hover:text-blue-600 transition-all duration-200"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-hairline bg-white text-body transition-colors hover:border-hairline-strong hover:text-brand"
                 aria-label="Share on LinkedIn"
               >
-                <svg className="w-3 h-3 md:w-4 md:h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-                </svg>
+                <IconBrandLinkedin size={17} stroke={1.75} aria-hidden="true" />
               </button>
 
               <button
                 onClick={() => handleShare('facebook')}
-                className="p-1.5 md:p-2 rounded-lg bg-slate-100 hover:bg-blue-100 hover:text-blue-600 transition-all duration-200"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-hairline bg-white text-body transition-colors hover:border-hairline-strong hover:text-brand"
                 aria-label="Share on Facebook"
               >
-                <svg className="w-3 h-3 md:w-4 md:h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                </svg>
+                <IconBrandFacebook size={17} stroke={1.75} aria-hidden="true" />
               </button>
 
               <div className="relative">
                 <button
                   onClick={() => handleShare('copy')}
-                  className="p-1.5 md:p-2 rounded-lg bg-slate-100 hover:bg-blue-100 hover:text-blue-600 transition-all duration-200"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-hairline bg-white text-body transition-colors hover:border-hairline-strong hover:text-brand"
                   aria-label="Copy link"
                 >
-                  <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
+                  <IconLink size={17} stroke={1.75} aria-hidden="true" />
                 </button>
-                {shareTooltip && (
-                  <span className="absolute -top-7 md:-top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-900 text-white text-[0.65rem] md:text-xs rounded whitespace-nowrap">
-                    {shareTooltip}
-                  </span>
-                )}
+                {/* Always mounted, so screen readers announce the text that
+                    appears in it. Right-aligned to the button (the last one in
+                    the row): centred, the longer failure text ran off-screen
+                    when the row sits at the right edge. */}
+                <span role="status">
+                  {shareTooltip && (
+                    <span className="absolute -top-7 md:-top-8 right-0 px-2 py-1 bg-slate-900 text-white text-[0.65rem] md:text-xs rounded whitespace-nowrap">
+                      {shareTooltip}
+                    </span>
+                  )}
+                </span>
               </div>
             </div>
           </div>
@@ -331,19 +338,19 @@ export default function BlogPost() {
         </header>
 
         {/* Article Content */}
-        <div className="prose prose-sm md:prose-lg max-w-none">
+        <div>
           {/* Introduction */}
           <div className="mb-10 md:mb-12">
             {post.content.intro.map((paragraph, i) => (
-              <p key={i} className="mb-4 md:mb-6 text-slate-700 text-sm md:text-base leading-relaxed text-justify">
+              <p key={i} className="mb-4 md:mb-6 text-body text-base md:text-[1.0625rem] leading-[1.75]">
                 {paragraph}
               </p>
             ))}
           </div>
 
           {/* Images after intro */}
-          {getImagesByPosition('after-intro').map((img, i) => (
-            <BlogImage key={i} src={img.src} alt={img.alt} caption={img.caption} />
+          {getImagesByPosition('after-intro').map((img) => (
+            <BlogImage key={img.src} src={img.src} alt={img.alt} caption={img.caption} width={img.width} height={img.height} />
           ))}
 
           {/* Sections */}
@@ -351,17 +358,17 @@ export default function BlogPost() {
             <div key={sectionIndex}>
               <section className="mb-12 md:mb-16 pb-10 md:pb-12 border-b border-slate-200 last:border-0">
                 {section.eyebrow && (
-                  <p className="text-[0.65rem] md:text-xs font-bold tracking-widest uppercase text-slate-400 mb-2 md:mb-3">
+                  <p className="text-[0.65rem] md:text-xs font-bold tracking-widest uppercase text-muted mb-2 md:mb-3">
                     {section.eyebrow}
                   </p>
                 )}
                 
-                <h2 className="text-xl md:text-3xl font-black text-slate-900 mb-3 md:mb-4 leading-tight">
+                <h2 className="text-xl md:text-3xl font-[650] tracking-[-0.02em] text-ink mb-3 md:mb-4 leading-tight">
                   {section.title}
                 </h2>
                 
                 {section.description && (
-                  <p className="text-sm md:text-lg text-slate-600 mb-6 md:mb-8 text-justify">
+                  <p className="text-sm md:text-lg text-slate-600 mb-6 md:mb-8">
                     {section.description}
                   </p>
                 )}
@@ -375,7 +382,7 @@ export default function BlogPost() {
                         className="p-4 md:p-6 border border-slate-200 rounded-lg md:rounded-xl bg-white hover:shadow-lg transition-shadow duration-300"
                       >
                         <h3 className="text-base md:text-xl font-bold text-slate-900 mb-1 md:mb-2">{item.title}</h3>
-                        <p className="text-xs md:text-sm text-slate-600 mb-3 md:mb-4 text-justify">{item.subtitle}</p>
+                        <p className="text-xs md:text-sm text-slate-600 mb-3 md:mb-4">{item.subtitle}</p>
                         <ul className="space-y-1.5 md:space-y-2">
                           {item.points.map((point, j) => (
                             <li key={j} className="flex items-start gap-1.5 md:gap-2 text-xs md:text-sm text-slate-700">
@@ -397,8 +404,8 @@ export default function BlogPost() {
                         key={i}
                         className="p-4 md:p-6 border border-slate-200 rounded-lg md:rounded-xl bg-slate-50 text-center"
                       >
-                        <div className="text-xl md:text-2xl font-black text-slate-900 mb-1 md:mb-2">{stat.value}</div>
-                        <div className="text-xs md:text-sm text-slate-600 text-justify">{stat.label}</div>
+                        <div className="text-xl md:text-2xl font-[650] tracking-[-0.02em] text-ink mb-1 md:mb-2">{stat.value}</div>
+                        <div className="text-xs md:text-sm text-slate-600">{stat.label}</div>
                       </div>
                     ))}
                   </div>
@@ -409,20 +416,20 @@ export default function BlogPost() {
                   <ol className="space-y-8 md:space-y-10 my-8 md:my-10">
                     {section.reasons.map((reason, i) => (
                       <li key={i} className="relative pl-10 md:pl-12">
-                        <span className="absolute left-0 top-0 text-3xl md:text-4xl font-black text-blue-100">
+                        <span className="absolute left-0 top-0 text-3xl md:text-4xl font-[650] text-brand/70">
                           {reason.number}
                         </span>
                         <h3 className="text-base md:text-xl font-bold text-slate-900 mb-3 md:mb-4">{reason.title}</h3>
                         
                         {reason.content.map((para, j) => (
-                          <p key={j} className="mb-3 md:mb-4 text-slate-700 text-sm md:text-base leading-relaxed text-justify">
+                          <p key={j} className="mb-3 md:mb-4 text-body text-base md:text-[1.0625rem] leading-[1.75]">
                             {para}
                           </p>
                         ))}
 
                         {reason.quote && (
                           <blockquote className="my-4 md:my-6 pl-3 md:pl-4 border-l-3 md:border-l-4 border-blue-500 bg-blue-50 p-3 md:p-4 rounded-r-lg">
-                            <p className="text-slate-800 italic text-xs md:text-base text-justify">{reason.quote}</p>
+                            <p className="text-slate-800 italic text-xs md:text-base">{reason.quote}</p>
                           </blockquote>
                         )}
 
@@ -440,7 +447,7 @@ export default function BlogPost() {
                 {section.content && (
                   <div className="my-6 md:my-8">
                     {section.content.map((para, i) => (
-                      <p key={i} className="mb-4 md:mb-6 text-slate-700 text-sm md:text-base leading-relaxed text-justify">
+                      <p key={i} className="mb-4 md:mb-6 text-body text-base md:text-[1.0625rem] leading-[1.75]">
                         {para}
                       </p>
                     ))}
@@ -456,7 +463,7 @@ export default function BlogPost() {
                         className="p-4 md:p-6 border border-slate-200 rounded-lg md:rounded-xl bg-white hover:shadow-lg transition-shadow duration-300"
                       >
                         <h4 className="text-sm md:text-lg font-bold text-slate-900 mb-1 md:mb-2">{pillar.title}</h4>
-                        <p className="text-xs md:text-sm text-slate-600 text-justify">{pillar.description}</p>
+                        <p className="text-xs md:text-sm text-slate-600">{pillar.description}</p>
                       </div>
                     ))}
                   </div>
@@ -464,13 +471,13 @@ export default function BlogPost() {
               </section>
 
               {/* Images after this section (if any) */}
-              {getImagesByPosition(`after-section-${sectionIndex}`).map((img, i) => (
-                <BlogImage key={i} src={img.src} alt={img.alt} caption={img.caption} />
+              {getImagesByPosition(`after-section-${sectionIndex}`).map((img) => (
+                <BlogImage key={img.src} src={img.src} alt={img.alt} caption={img.caption} width={img.width} height={img.height} />
               ))}
 
               {/* Special position: after comparison (first section) */}
-              {sectionIndex === 0 && getImagesByPosition('after-comparison').map((img, i) => (
-                <BlogImage key={i} src={img.src} alt={img.alt} caption={img.caption} />
+              {sectionIndex === 0 && getImagesByPosition('after-comparison').map((img) => (
+                <BlogImage key={img.src} src={img.src} alt={img.alt} caption={img.caption} width={img.width} height={img.height} />
               ))}
             </div>
           ))}
@@ -478,7 +485,7 @@ export default function BlogPost() {
           {/* References */}
           {post.content.references && (
             <section className="mb-12 md:mb-16">
-              <h2 className="text-xl md:text-3xl font-black text-slate-900 mb-6 md:mb-8">Scientific References</h2>
+              <h2 className="text-xl md:text-3xl font-[650] tracking-[-0.02em] text-ink mb-6 md:mb-8">Scientific References</h2>
               <ol className="space-y-4 md:space-y-6">
                 {post.content.references.map((ref) => (
                   <li key={ref.id} className="pb-4 md:pb-6 border-b border-slate-100 last:border-0">
@@ -503,14 +510,14 @@ export default function BlogPost() {
 
         {/* Author Info */}
         <div className="mt-12 md:mt-16 p-6 md:p-8 bg-gradient-to-br from-blue-50 to-slate-50 rounded-xl md:rounded-2xl border border-blue-100">
-          <p className="text-[0.65rem] md:text-xs font-bold tracking-widest uppercase text-slate-400 mb-2 md:mb-3">Author</p>
+          <p className="text-[0.65rem] md:text-xs font-bold tracking-widest uppercase text-muted mb-2 md:mb-3">Author</p>
           <div className="flex items-start gap-3 md:gap-4">
-            <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-base md:text-xl flex-shrink-0">
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-brand flex items-center justify-center text-white font-semibold text-base md:text-xl flex-shrink-0">
               OT
             </div>
             <div>
               <h3 className="text-base md:text-xl font-bold text-slate-900 mb-1 md:mb-2">{post.author}</h3>
-              <p className="text-xs md:text-base text-slate-600 leading-relaxed text-justify">
+              <p className="text-xs md:text-base text-slate-600 leading-relaxed">
                 Pioneering the future of precision oncology through AI-powered molecular surveillance and liquid biopsy technologies.
               </p>
             </div>
@@ -520,24 +527,29 @@ export default function BlogPost() {
 
       {/* Related Posts */}
       {relatedPosts.length > 0 && (
-        <section className="bg-slate-50 py-12 md:py-16">
-          <div className="max-w-[1600px] mx-auto px-4 md:px-6 lg:px-8">
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-6 md:mb-8">Related Articles</h2>
+        <section className="border-t border-hairline bg-canvas py-12 md:py-16">
+          <div className="ot-container">
+            <h2 className="text-2xl md:text-3xl font-[650] tracking-[-0.02em] text-ink mb-6 md:mb-8">Related Articles</h2>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-8">
               {relatedPosts.map((related) => (
                 <article
                   key={related.id}
-                  onClick={() => navigate(`/blog/${related.slug}`)}
-                  className="group bg-white rounded-lg md:rounded-xl border border-slate-200 overflow-hidden cursor-pointer hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+                  className="group relative overflow-hidden rounded-xl border border-hairline bg-white shadow-soft transition-[box-shadow,border-color,transform] duration-300 hover:-translate-y-0.5 hover:border-hairline-strong hover:shadow-lift"
                 >
                   <div className="p-4 md:p-6">
                     <span className="inline-block px-2.5 py-0.5 md:px-3 md:py-1 text-[0.65rem] md:text-xs font-semibold uppercase bg-blue-50 text-blue-600 rounded-lg mb-2 md:mb-3">
                       {related.category}
                     </span>
-                    <h3 className="text-base md:text-lg font-bold text-slate-900 mb-1 md:mb-2 group-hover:text-blue-600 transition-colors duration-300">
-                      {related.title}
+                    <h3 className="mb-2 text-[1.0625rem] font-semibold leading-snug tracking-[-0.015em] text-ink">
+                      <a
+                        href={`/blog/${related.slug}`}
+                        onClick={(e) => { e.preventDefault(); navigate(`/blog/${related.slug}`); }}
+                        className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:rounded-xl focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-brand"
+                      >
+                        {related.title}
+                      </a>
                     </h3>
-                    <p className="text-xs md:text-sm text-slate-600 mb-3 md:mb-4 line-clamp-2 text-justify">
+                    <p className="text-xs md:text-sm text-slate-600 mb-3 md:mb-4 line-clamp-2">
                       {related.subtitle}
                     </p>
                     <div className="flex items-center gap-1.5 md:gap-2 text-[0.65rem] md:text-xs text-slate-500">
@@ -554,14 +566,13 @@ export default function BlogPost() {
       )}
 
       {/* Back to Blog */}
-      <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-10 md:py-12">
+      <div className="mx-auto max-w-[52rem] px-4 py-10 md:px-6 md:py-12">
         <button
+          type="button"
           onClick={() => navigate('/blog')}
-          className="inline-flex items-center gap-1.5 md:gap-2 px-4 py-2 md:px-6 md:py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm md:text-base font-semibold rounded-lg md:rounded-xl transition-colors duration-200"
+          className="ot-btn ot-btn-secondary"
         >
-          <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
+          <IconArrowLeft size={17} stroke={1.75} aria-hidden="true" />
           Back to All Articles
         </button>
       </div>

@@ -5,7 +5,8 @@ import pytest
 from app.core import config
 
 TEST_USERNAME = "test-user"
-TEST_PASSWORD = "test-pass"
+# At least config.MIN_DEMO_PASSWORD_LENGTH: a shorter one is refused as unconfigured.
+TEST_PASSWORD = "test-password-123"
 
 
 def basic_auth_header(username=TEST_USERNAME, password=TEST_PASSWORD):

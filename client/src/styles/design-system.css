@@ -1,0 +1,357 @@
+/* OncoTrace-AI design system.
+
+   Scope rules (the protected sample report depends on them):
+   - @theme only ADDS new token names; it never redefines a Tailwind default
+     (colors, spacing, radius, breakpoints...), because the report's wrapper
+     is styled with default utilities.
+   - Every rule below targets an `ot-*` class or a data attribute. No element
+     or universal selectors: those would reach into the report.
+   - The site typeface is applied with `.ot-site`/`font-site`, never on body.
+     body keeps its original font declaration (Recharts measures chart ticks
+     with a span appended to <body>). */
+
+@theme {
+  /* Ink and surfaces (cool slate family, one palette) */
+  --color-ink: #0b1220;
+  --color-ink-2: #1e293b;
+  --color-body: #334155;
+  --color-muted: #526077;          /* 6.2:1 on white, 5.9:1 on canvas */
+  --color-canvas: #f8fafc;         /* identical to the report section bg */
+  --color-sunken: #f1f5f9;
+  --color-hairline: #e2e8f0;
+  --color-hairline-strong: #cbd5e1;
+
+  /* The single accent */
+  --color-brand: #1d4ed8;          /* 6.7:1 on white */
+  --color-brand-strong: #1e40af;
+  --color-brand-soft: #eff6ff;
+  --color-brand-line: #bfdbfe;
+
+  /* Deep band (closing section, statement cards) */
+  --color-night: #0b1424;
+  --color-night-2: #111c33;
+
+  --font-site: 'Plus Jakarta Sans', 'Plus Jakarta Sans Fallback', ui-sans-serif, system-ui, sans-serif;
+  --font-tech: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --shadow-soft: 0 1px 2px rgb(15 23 42 / 0.04), 0 6px 20px -10px rgb(15 23 42 / 0.12);
+  --shadow-lift: 0 2px 6px rgb(15 23 42 / 0.05), 0 24px 48px -20px rgb(15 23 42 / 0.22);
+
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer components {
+  /* ── Frame ─────────────────────────────────────────────────────────── */
+  /* Sets ONLY font-family: .ot-report-boundary resets exactly this one
+     inherited property for the protected report. */
+  .ot-site {
+    font-family: var(--font-site);
+  }
+
+  /* The report's own wrapper inherited body's exact stack before this
+     redesign; restore it at the boundary so nothing about it changes. */
+  .ot-report-boundary {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+
+  .ot-container {
+    width: 100%;
+    max-width: 1240px;
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 0.4rem + 2.6vw, 2.5rem);
+  }
+
+  .ot-section {
+    padding-block: clamp(4rem, 2.6rem + 5vw, 7.5rem);
+  }
+
+  /* ── Type ──────────────────────────────────────────────────────────── */
+  .ot-display {
+    font-size: clamp(2rem, 1.1rem + 3.4vw, 3.5rem);
+    font-weight: 650;
+    line-height: 1.05;
+    letter-spacing: -0.035em;
+    color: var(--color-ink);
+    text-wrap: balance;
+  }
+
+  .ot-h2 {
+    font-size: clamp(1.75rem, 1.2rem + 2vw, 2.625rem);
+    font-weight: 650;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    color: var(--color-ink);
+    text-wrap: balance;
+  }
+
+  .ot-h3 {
+    font-size: clamp(1.125rem, 1rem + 0.5vw, 1.375rem);
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+    color: var(--color-ink);
+    text-wrap: balance;
+  }
+
+  .ot-lead {
+    font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.1875rem);
+    line-height: 1.6;
+    color: #475569;
+    max-width: 62ch;
+    text-wrap: pretty;
+  }
+
+  .ot-body {
+    font-size: 1rem;
+    line-height: 1.65;
+    color: var(--color-body);
+    text-wrap: pretty;
+  }
+
+  .ot-small {
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--color-muted);
+    text-wrap: pretty;
+  }
+
+  .ot-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-tech);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-brand);
+  }
+
+  .ot-tech {
+    font-family: var(--font-tech);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
+  .ot-num {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+  }
+
+  /* ── Phones (< 640px): calmer scale ──────────────────────────────────
+     Desktop-sized display type and section padding read as "big" on a
+     390px screen. Only these site classes change; tablet and desktop keep
+     the values above exactly. */
+  @media (max-width: 639px) {
+    .ot-section { padding-block: 3.25rem; }
+    .ot-display { font-size: 1.875rem; letter-spacing: -0.03em; }
+    .ot-h2 { font-size: 1.625rem; letter-spacing: -0.025em; }
+    .ot-h3 { font-size: 1.0625rem; }
+    .ot-lead { font-size: 1rem; line-height: 1.6; }
+    .ot-body { font-size: 0.9375rem; line-height: 1.65; }
+    .ot-small { font-size: 0.8125rem; }
+  }
+
+  /* ── Buttons ───────────────────────────────────────────────────────── */
+  .ot-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0 1.25rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-family: var(--font-site);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .ot-btn:focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 3px;
+  }
+  .ot-btn[disabled],
+  .ot-btn[aria-disabled='true'] {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .ot-btn-sm {
+    min-height: 2.375rem;
+    padding: 0 1rem;
+    font-size: 0.875rem;
+  }
+
+  .ot-btn-primary {
+    background: var(--color-brand);
+    color: #fff;
+    box-shadow: 0 1px 2px rgb(29 78 216 / 0.3), inset 0 1px 0 rgb(255 255 255 / 0.14);
+  }
+  .ot-btn-primary:hover { background: var(--color-brand-strong); }
+
+  .ot-btn-secondary {
+    background: #fff;
+    color: var(--color-ink);
+    border-color: var(--color-hairline);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+  }
+  .ot-btn-secondary:hover {
+    border-color: var(--color-hairline-strong);
+    background: var(--color-canvas);
+  }
+
+  /* On the deep band */
+  .ot-btn-light {
+    background: #fff;
+    color: var(--color-ink);
+  }
+  .ot-btn-light:hover { background: var(--color-brand-soft); }
+  .ot-btn-light:focus-visible,
+  .ot-btn-ghost-dark:focus-visible { outline-color: #93c5fd; }
+
+  .ot-btn-ghost-dark {
+    background: rgb(255 255 255 / 0.04);
+    color: #e2e8f0;
+    border-color: rgb(255 255 255 / 0.16);
+  }
+  .ot-btn-ghost-dark:hover {
+    background: rgb(255 255 255 / 0.09);
+    border-color: rgb(255 255 255 / 0.28);
+  }
+
+  .ot-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-weight: 600;
+    color: var(--color-brand);
+    text-decoration: none;
+    border-radius: 4px;
+    transition: color 0.2s ease, gap 0.2s ease;
+  }
+  .ot-link:hover { color: var(--color-brand-strong); gap: 0.5rem; }
+  .ot-link:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 3px; }
+
+  /* ── Surfaces ──────────────────────────────────────────────────────── */
+  .ot-card {
+    background: #fff;
+    border: 1px solid var(--color-hairline);
+    border-radius: 12px;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .ot-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 1.75rem;
+    padding: 0 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-hairline);
+    background: #fff;
+    color: var(--color-body);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .ot-night {
+    background:
+      radial-gradient(120% 80% at 85% 0%, rgb(29 78 216 / 0.22), transparent 60%),
+      var(--color-night);
+    color: #cbd5e1;
+  }
+
+  /* ── Forms ─────────────────────────────────────────────────────────── */
+  .ot-label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-ink-2);
+  }
+
+  .ot-input {
+    display: block;
+    width: 100%;
+    min-height: 2.875rem;
+    padding: 0.625rem 0.875rem;
+    border-radius: 10px;
+    border: 1px solid var(--color-hairline-strong);
+    background: #fff;
+    color: var(--color-ink);
+    font-family: var(--font-site);
+    font-size: 1rem; /* >= 16px: no iOS zoom on focus */
+    line-height: 1.4;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .ot-input::placeholder { color: #7a8699; }
+  .ot-input:hover { border-color: #94a3b8; }
+  .ot-input:focus {
+    outline: none;
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 3px rgb(29 78 216 / 0.2);
+  }
+  .ot-input[aria-invalid='true'] {
+    border-color: #b91c1c;
+    box-shadow: 0 0 0 3px rgb(185 28 28 / 0.12);
+  }
+
+  .ot-field-error {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.375rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #b91c1c;
+  }
+
+  /* Dark-band variant (closing contact form) */
+  .ot-input-dark {
+    background: rgb(255 255 255 / 0.05);
+    border-color: rgb(255 255 255 / 0.16);
+    color: #f1f5f9;
+  }
+  .ot-input-dark::placeholder { color: #8a97ab; }
+  .ot-input-dark:hover { border-color: rgb(255 255 255 / 0.3); }
+  .ot-input-dark:focus {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgb(147 197 253 / 0.25);
+  }
+  .ot-label-dark { color: #cbd5e1; }
+
+  /* ── Focus (site-wide, report excluded) ────────────────────────────── */
+  .ot-site :where(a, button, [role='button'], summary, [tabindex]):focus-visible:not(:where([data-lb-theme], [data-lb-theme] *)) {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+
+  /* ── Media placeholder: images render visible over this ─────────────── */
+  .ot-media {
+    background-color: var(--color-sunken);
+    background-image: linear-gradient(135deg, #f1f5f9 0%, #e8edf4 100%);
+  }
+}
+
+/* ── Scroll reveal (components/motion/Reveal.jsx) ───────────────────────
+   Only JS ever sets data-reveal="pending", and only on elements that were
+   below the fold when the page became interactive, so prerendered HTML and
+   no-JS visitors always see everything. */
+[data-reveal='pending'] {
+  opacity: 0;
+  transform: translateY(16px);
+}
+@media print {
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

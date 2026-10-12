@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dist-dev
+dist-dev-ssr
 *.local
 
 # Editor directories and files
@@ -22,3 +24,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright (npm run test:e2e)
+playwright-report
+test-results
+blob-report

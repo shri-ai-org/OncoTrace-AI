@@ -18,12 +18,16 @@ export const blogPosts = [
     images: [
       {
         src: '/blog/blog1rsc1.webp',
+        width: 1366,
+        height: 768,
         alt: 'Molecular structure and sequencing data visualization showing ctDNA analysis',
         caption: 'Advanced sequencing technologies enable precise detection of circulating tumor DNA fragments in blood samples',
         position: 'after-intro' // Options: 'after-intro', 'after-comparison', 'after-reasons', 'custom'
       },
       {
         src: '/blog/blog1rsc2.webp',
+        width: 1400,
+        height: 696,
         alt: 'AI-powered genomic analysis and tumor heterogeneity mapping',
         caption: 'Machine learning algorithms process ctDNA data to track tumor evolution and treatment response in real-time',
         position: 'after-comparison'
@@ -247,13 +251,17 @@ export const blogPosts = [
 
     images: [
       {
-        src: '/blog/dna-helix.jpg',
+        src: '/blog/dna-helix.webp',
+        width: 1400,
+        height: 1051,
         alt: 'Close-up render of DNA double helix strands',
         caption: "The genome can be sequenced in hours — the data it produces still struggles to reach the researchers who need it.",
         position: 'after-intro'
       },
       {
-        src: '/blog/datacenter.jpeg',
+        src: '/blog/datacenter.webp',
+        width: 738,
+        height: 414,
         alt: 'Rows of illuminated server racks in a data center',
         caption: "Federated learning sends the AI model to each institution's own infrastructure, instead of moving sensitive records to a central server.",
         position: 'after-section-3'
