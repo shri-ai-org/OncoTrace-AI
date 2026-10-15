@@ -158,7 +158,7 @@
 }
 
 /* ── Capability cards (`capabilities` prop) ─────────────────────────────
-   A row of three linked cards in the copy, under the subtitle (in place of
+   A row of two linked cards in the copy, under the subtitle (in place of
    a CTA button). Phones: compact tiles (icon over a two-line label). From
    640px: horizontal cards with a caption. On desktop the row is left-aligned
    with the copy and never wider than the headline (as an inline-size
@@ -173,15 +173,21 @@
 }
 .ot-hero-caps-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
-  max-width: 40rem;
+  max-width: 27rem;
   margin: 0 auto;
   padding: 0;
   list-style: none;
 }
 .ot-hero-cap { display: flex; }
+/* Each card's colour comes from these; `data-tone` swaps them for a subtle
+   tint (the logo ribbon's rose and blue). Text stays ink for contrast. */
 .ot-hero-cap-link {
+  --cap-accent: var(--color-brand);
+  --cap-soft: var(--color-brand-soft);
+  --cap-line: rgb(191 219 254 / 0.9);
+  --cap-glow: rgb(29 78 216 / 0.38);
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -189,10 +195,10 @@
   gap: 0.5rem;
   min-height: 2.75rem;
   padding: 0.75rem 0.5rem;
-  border: 1px solid rgb(191 219 254 / 0.9);
+  border: 1px solid var(--cap-line);
   border-radius: 0.875rem;
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.95), rgb(255 255 255 / 0.8));
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 12px 30px -16px rgb(29 78 216 / 0.38);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.95), color-mix(in srgb, var(--cap-soft) 70%, rgb(255 255 255 / 0.8)));
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 12px 30px -16px var(--cap-glow);
   color: var(--color-ink);
   text-align: center;
   text-decoration: none;
@@ -200,12 +206,24 @@
 }
 .ot-hero-cap-link:hover {
   transform: translateY(-2px);
-  border-color: var(--color-brand);
-  box-shadow: 0 2px 6px rgb(15 23 42 / 0.06), 0 18px 40px -18px rgb(29 78 216 / 0.5);
+  border-color: var(--cap-accent);
+  box-shadow: 0 2px 6px rgb(15 23 42 / 0.06), 0 18px 40px -18px var(--cap-glow);
 }
 .ot-hero-cap-link:focus-visible {
-  outline: 2px solid var(--color-brand);
+  outline: 2px solid var(--cap-accent);
   outline-offset: 3px;
+}
+.ot-hero-cap-link[data-tone="rose"] {
+  --cap-accent: #be185d;
+  --cap-soft: #fdf2f8;
+  --cap-line: rgb(251 207 232 / 0.95);
+  --cap-glow: rgb(190 24 93 / 0.26);
+}
+.ot-hero-cap-link[data-tone="sky"] {
+  --cap-accent: #0369a1;
+  --cap-soft: #f0f9ff;
+  --cap-line: rgb(186 230 253 / 0.95);
+  --cap-glow: rgb(3 105 161 / 0.26);
 }
 .ot-hero-cap-icon {
   display: grid;
@@ -213,10 +231,10 @@
   place-items: center;
   width: 2.25rem;
   height: 2.25rem;
-  border: 1px solid var(--color-brand-line);
+  border: 1px solid var(--cap-line);
   border-radius: 0.625rem;
-  background: linear-gradient(135deg, #ffffff, var(--color-brand-soft));
-  color: var(--color-brand);
+  background: linear-gradient(135deg, #ffffff, var(--cap-soft));
+  color: var(--cap-accent);
 }
 .ot-hero-cap-text {
   display: flex;
@@ -239,7 +257,7 @@
 }
 
 @media (min-width: 640px) {
-  .ot-hero-caps-list { max-width: 48rem; gap: 0.75rem; }
+  .ot-hero-caps-list { max-width: 36rem; gap: 0.75rem; }
   .ot-hero-cap-link {
     flex-direction: row;
     gap: 0.75rem;
@@ -250,7 +268,7 @@
   .ot-hero-cap-caption { display: block; }
 }
 @media (min-width: 1024px) {
-  .ot-hero--split .ot-hero-caps-list { margin: 0; max-width: none; }
+  .ot-hero--split .ot-hero-caps-list { margin: 0; max-width: 36rem; }
 }
 @media (min-width: 640px) {
   @container (max-width: 719.98px) {

@@ -12,7 +12,7 @@ export const SITE_URL = "https://www.oncotrace-ai.org";
 
 const DEFAULT_TITLE = "OncoTrace-AI — Liquid Biopsy Intelligence";
 const DEFAULT_DESCRIPTION =
-  "Open-source, AI-powered mammogram and liquid biopsy analysis, with lung cancer CT imaging in development. Powered by Senus Healthcare Research Institute, USA.";
+  "Open-source, AI-powered mammogram and liquid biopsy analysis, with lung cancer CT imaging in development. Supported by Senus Healthcare Research Institute, USA.";
 const DEFAULT_IMAGE = `${SITE_URL}/og-image.jpg`;
 
 const ROUTE_META = {

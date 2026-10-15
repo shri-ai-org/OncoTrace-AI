@@ -31,11 +31,10 @@ for (const [device, viewport] of [['desktop', DESKTOP], ['phone', PHONE]]) {
     test('hero capability buttons scroll to their sections', async ({ page }) => {
       const errors = trackErrors(page);
       const caps = page.locator('.ot-hero .ot-hero-cap-link');
-      await expect(caps).toHaveCount(3);
+      await expect(caps).toHaveCount(2);
       for (const [text, id] of [
-        ['Mammogram Analysis', '#mammogram'],
-        ['Liquid Biopsy Analysis', '#liquid-biopsy'],
-        ['Lung Cancer Analysis', '#lung-imaging'],
+        ['AI Breast Cancer Monitoring', '#mammogram'],
+        ['AI Lung Cancer Monitoring', '#lung-imaging'],
       ]) {
         await scrollToTop(page);
         await scrollSettled(page);

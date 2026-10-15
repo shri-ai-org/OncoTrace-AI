@@ -1,5 +1,5 @@
 import { Fragment } from 'react'
-import { IconLungs, IconScan, IconTestPipe2 } from '@tabler/icons-react'
+import { IconLungs, IconScan } from '@tabler/icons-react'
 import Reveal from '../motion/Reveal'
 import Hero from '../ui/Hero'
 import BloodDropParticles from '../motion/BloodDropParticles'
@@ -116,17 +116,24 @@ function VConnector({ compact = false }) {
    HERO
    ═══════════════════════════════════════════════════════ */
 
-// The three capabilities, as linked cards under the subtitle (in place of a
-// CTA button). Same icons as their navbar links.
+// The two capabilities, as linked cards under the subtitle (in place of a
+// CTA button). Same icons as their navbar links; each card is tinted with
+// one of the logo ribbon's two colours.
 const CAPABILITIES = [
-  { label: 'Mammogram Analysis', caption: 'AI · Breast imaging', Icon: IconScan, href: '#mammogram', onSelect: () => scrollToSection('mammogram') },
-  { label: 'Liquid Biopsy Analysis', caption: 'AI · Blood ctDNA', Icon: IconTestPipe2, href: '#liquid-biopsy', onSelect: () => scrollToSection('liquid-biopsy') },
-  { label: 'Lung Cancer Analysis', caption: 'AI · CT imaging', Icon: IconLungs, href: '#lung-imaging', onSelect: () => scrollToSection('lung-imaging') },
+  { label: 'AI Breast Cancer Monitoring', caption: 'AI · Breast imaging', Icon: IconScan, href: '#mammogram', onSelect: () => scrollToSection('mammogram'), tone: 'rose' },
+  { label: 'AI Lung Cancer Monitoring', caption: 'AI · CT imaging', Icon: IconLungs, href: '#lung-imaging', onSelect: () => scrollToSection('lung-imaging'), tone: 'sky' },
 ]
 
-// Reused from the platform card further down the page.
-const HERO_SUBTITLE =
-  'AI-driven cancer intelligence across the entire disease lifecycle — from early risk prediction using imaging data to continuous progression monitoring powered by liquid biopsy.'
+// The three outcomes a visitor should take away are emphasised.
+const KEY = 'font-semibold text-ink'
+const HERO_SUBTITLE = (
+  <>
+    With just a drop of blood, AI can give you the insights that guide
+    cancer <strong className={KEY}>prediction</strong>,{' '}
+    <strong className={KEY}>continuous monitoring</strong> and{' '}
+    <strong className={KEY}>treatment</strong>.
+  </>
+)
 
 function HeroIntro() {
   return (
@@ -174,7 +181,7 @@ function HeroIntro() {
       }
       footnote={
         <p>
-          Powered by{' '}
+          Supported by{' '}
           <a
             href="https://shri-ai.org/"
             target="_blank"

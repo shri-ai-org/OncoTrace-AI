@@ -18,7 +18,7 @@ import "./Hero.css";
    desktop, with the copy left-aligned just left of centre; below `lg` it
    sits under the copy, on the arc.
 
-   `capabilities` (optional): [{ label, caption, Icon, href, onSelect }],
+   `capabilities` (optional): [{ label, caption, Icon, href, onSelect, tone }],
    shown as a row of linked cards under the subtitle, where a `cta` button
    would go (pass one or the other).
 
@@ -96,7 +96,7 @@ export default function Hero({ eyebrow, title, tagline, subtitle, cta, footnote,
           {capabilities?.length > 0 && (
             <nav className="ot-hero-caps ot-hero-in-3" aria-label="What we analyse">
               <ul className="ot-hero-caps-list">
-                {capabilities.map(({ label, caption, Icon, href, onSelect }) => (
+                {capabilities.map(({ label, caption, Icon, href, onSelect, tone }) => (
                   <li key={href} className="ot-hero-cap">
                     <a
                       href={href}
@@ -106,6 +106,7 @@ export default function Hero({ eyebrow, title, tagline, subtitle, cta, footnote,
                         onSelect();
                       }}
                       className="ot-hero-cap-link"
+                      data-tone={tone}
                     >
                       <span className="ot-hero-cap-icon" aria-hidden="true">
                         <Icon size={19} stroke={1.75} />

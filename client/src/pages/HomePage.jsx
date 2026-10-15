@@ -74,11 +74,13 @@ function Section({ id, children, className = '' }) {
 
 /* Where the visitor was on each history entry of the homepage, so Back/Forward
    returns them there (React Router does not restore scroll). Keyed by the
-   entry's location.key; in memory for this page session only. */
+   entry's location.key; in memory for this page session only, so a saved
+   position also marks the entry as one the visitor is coming back to. */
 const savedScroll = new Map();
-// Set once the visitor has actually left the homepage (checked after unmount,
-// so React StrictMode's dev-only remount doesn't count as leaving).
-let leftHome = false;
+
+// The browser's current history entry, keyed as React Router keys it (the
+// session's first entry has no key in history.state: "default").
+const currentEntryKey = () => window.history.state?.key ?? 'default';
 
 /* If a lazily loaded section's chunk can't be fetched (flaky network, or a
    deploy replaced it), that section is left out instead of the whole page
@@ -104,32 +106,32 @@ export default function HomePage({ onNavigate }) {
   const navigationType = useNavigationType();
   const didMount = useRef(false);
 
-  // Remember this entry's scroll position (see savedScroll). A layout effect,
-  // so the listener is removed in the same commit that leaves the page: a
-  // passive effect's cleanup runs a frame later, after the navigation's own
-  // scroll-to-top has already been recorded over the real position.
+  // Remember this entry's scroll position (see savedScroll), but only while it
+  // is the browser's current entry. Leaving changes the URL before React
+  // unmounts this page (much later while the next page's code downloads), and
+  // the navigation's own scroll-to-top must not overwrite the real position.
   useLayoutEffect(() => {
     const key = location.key;
-    const onScroll = () => savedScroll.set(key, window.scrollY);
+    const onScroll = () => {
+      if (currentEntryKey() === key) savedScroll.set(key, window.scrollY);
+    };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, [location.key]);
-
-  useEffect(() => () => {
-    setTimeout(() => { if (window.location.pathname !== '/') leftHome = true; }, 0);
-  }, []);
 
   // Deep links: /?section=team or /#team
   useEffect(() => {
     const params  = new URLSearchParams(location.search);
     const section = params.get('section') || location.hash?.replace('#', '');
 
-    // Back/Forward to the homepage (not the first visit): put the visitor back
-    // where they were, rather than jumping to ?section= again.
-    if (navigationType === 'POP' && leftHome) {
+    // Back/Forward to a homepage entry already visited in this session: put
+    // the visitor back where they were, rather than jumping to ?section=
+    // again. Decided by the saved position, not by when the page unmounted: a
+    // quick Back while the next page's code was still loading used to read as
+    // a first visit. (A first visit is also a POP, with nothing saved yet.)
+    const y = navigationType === 'POP' ? savedScroll.get(location.key) : undefined;
+    if (y != null) {
       didMount.current = true;
-      const y = savedScroll.get(location.key);
-      if (y == null) return undefined;
       return afterHomeLayout(() => window.scrollTo({ top: y, behavior: 'instant' }));
     }
 
